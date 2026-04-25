@@ -733,6 +733,32 @@ function animate(){
     camera.lookAt(0,0,-8);
   }
 
+  // オートプレイスケジューラ
+  if(autoplayMode && autoplayStart !== null && FUMEN){
+    const apElapsed = (performance.now()-autoplayStart)/1000;
+
+    // ① TRAVEL_TIME 先行してノーツをスポーン
+    while(autoSpawnIdx < FUMEN.notes.length &&
+          FUMEN.notes[autoSpawnIdx].time - TRAVEL_TIME <= apElapsed){
+      spawnNoteAtZ(FUMEN.notes[autoSpawnIdx].lane, NOTE_Z_SPAWN);
+      autoSpawnIdx++;
+    }
+    // ② ヒット時刻に音・エフェクト
+    while(autoAudioIdx < FUMEN.notes.length &&
+          FUMEN.notes[autoAudioIdx].time <= apElapsed){
+      hitAutoNoteEffects(FUMEN.notes[autoAudioIdx]);
+      autoAudioIdx++;
+    }
+
+    const pct = Math.min(100, apElapsed/FUMEN.totalDuration*100);
+    autoBarFill.style.width = pct+'%';
+    autoTimerEl.textContent = fmtTime(apElapsed)+' / '+fmtTime(FUMEN.totalDuration);
+    if(autoAudioIdx >= FUMEN.notes.length && apElapsed > FUMEN.totalDuration){
+      autoplayMode = false;
+      autoBarFill.style.width = '100%';
+    }
+  }
+
   // ヒットライン点滅
   if(hitLine3D) hitLine3D.material.opacity = 0.7 + Math.sin(Date.now()*0.006)*0.22;
 

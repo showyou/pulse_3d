@@ -258,13 +258,9 @@ html = html.replace(
 
 # ════════════════════════════════════════════════════════
 # 10. animate 内の hitLine3D を null ガード
+#     ※ AUTOPLAY_TICK 挿入より先に行うと検索文字列が変わるため
+#     　 AUTOPLAY_TICK 側で一緒に対処する（このステップは何もしない）
 # ════════════════════════════════════════════════════════
-html = html.replace(
-    "  // ヒットライン点滅\n"
-    "  hitLine3D.material.opacity = 0.7 + Math.sin(Date.now()*0.006)*0.22;",
-    "  // ヒットライン点滅\n"
-    "  if(hitLine3D) hitLine3D.material.opacity = 0.7 + Math.sin(Date.now()*0.006)*0.22;"
-)
 
 # ════════════════════════════════════════════════════════
 # 11. buildPianoUI で未使用キーに disabled クラス付与
@@ -597,6 +593,7 @@ html = html.replace(
     "  // ヒットライン点滅\n"
     "  if(hitLine3D) hitLine3D.material.opacity = 0.7 + Math.sin(Date.now()*0.006)*0.22;"
 )
+assert "// オートプレイスケジューラ" in html, "AUTOPLAY_TICK の挿入に失敗しました！"
 
 # ════════════════════════════════════════════════════════
 # 検証
