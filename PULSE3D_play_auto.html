@@ -312,12 +312,11 @@ scene.add(hwGroup);
 
 function buildHighway(){
   const totalHWWidth = ACTIVE_TOTAL * LANE_UNIT;
-  // 古いメッシュを削除
   while(hwGroup.children.length>0) hwGroup.remove(hwGroup.children[0]);
   laneGlowMats = new Map();
 
-  // 床
-  const floorMesh = new THREE.Mesh(
+// 床
+const floorMesh = new THREE.Mesh(
   new THREE.PlaneGeometry(totalHWWidth + 0.6, HIGHWAY_LEN),
   new THREE.MeshBasicMaterial({color:0x001122, transparent:true, opacity:0.5, side:THREE.DoubleSide})
 );
@@ -327,8 +326,9 @@ hwGroup.add(floorMesh);
 
 // 各レーン帯
 laneGlowMats = new Map();
-for(let i=0;i<TOTAL_LANES;i++){
-  const x = (i - (TOTAL_LANES-1)/2) * LANE_UNIT;
+for(let _ai=0;_ai<ACTIVE_TOTAL;_ai++){
+  const i = ACTIVE_LANES[_ai];
+  const x = (_ai - (ACTIVE_TOTAL-1)/2) * LANE_UNIT;
   const isBlack = BLACK_KEYS.some(b=>b.lane===i);
   const mat = new THREE.MeshBasicMaterial({
     color: LANE_COLORS_INT[i],
@@ -347,8 +347,8 @@ for(let i=0;i<TOTAL_LANES;i++){
 }
 
 // 区切り線
-for(let i=0;i<=TOTAL_LANES;i++){
-  const x = (i - TOTAL_LANES/2) * LANE_UNIT - LANE_GAP/2;
+for(let i=0;i<=ACTIVE_TOTAL;i++){
+  const x = (i - ACTIVE_TOTAL/2) * LANE_UNIT - LANE_GAP/2;
   const m = new THREE.Mesh(
     new THREE.PlaneGeometry(0.02, HIGHWAY_LEN),
     new THREE.MeshBasicMaterial({color:0x1a3a55, transparent:true, opacity:0.4, side:THREE.DoubleSide})
@@ -359,14 +359,14 @@ for(let i=0;i<=TOTAL_LANES;i++){
 }
 
 // ヒットライン(3D)
-const hitLine3D = new THREE.Mesh(
+hitLine3D = new THREE.Mesh(
   new THREE.PlaneGeometry(totalHWWidth + 0.6, 0.07),
   new THREE.MeshBasicMaterial({color:0xff2233, transparent:true, opacity:0.88, side:THREE.DoubleSide})
 );
 hitLine3D.rotation.x = -Math.PI/2;
 hitLine3D.position.set(0, 0.02, 4.2);
 hwGroup.add(hitLine3D);
-}
+} // end buildHighway
 
 let laneGlowMats = new Map();
 let hitLine3D = null;

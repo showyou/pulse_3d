@@ -170,41 +170,57 @@ html = html.replace(
 
 # ════════════════════════════════════════════════════════
 # 7. ハイウェイ構築コードを buildHighway() 関数にまとめる
-#    hwGroup, LANE_W 等の定数は外に残す
+#    ・レーンループを ACTIVE_LANES ベースに変更
+#    ・区切り線も ACTIVE_TOTAL ベースに変更
+#    ・hitLine3D を外部 let に代入（const を除去）
 # ════════════════════════════════════════════════════════
-# laneGlowMats は外で let 宣言してから buildHighway 内でリセット
+
+# 7a. レーンループ: TOTAL_LANES → ACTIVE_LANES、X位置もリマップ
 html = html.replace(
-    "// 各レーン帯\nconst laneGlowMats = [];",
-    "// 各レーン帯\nlaneGlowMats = new Map();"
+    "// 各レーン帯\nconst laneGlowMats = [];\n"
+    "for(let i=0;i<TOTAL_LANES;i++){\n"
+    "  const x = (i - (TOTAL_LANES-1)/2) * LANE_UNIT;",
+
+    "// 各レーン帯\nlaneGlowMats = new Map();\n"
+    "for(let _ai=0;_ai<ACTIVE_TOTAL;_ai++){\n"
+    "  const i = ACTIVE_LANES[_ai];\n"
+    "  const x = (_ai - (ACTIVE_TOTAL-1)/2) * LANE_UNIT;"
 )
 html = html.replace(
     "  laneGlowMats.push({mat, base: isBlack ? 0.055 : 0.08});",
     "  laneGlowMats.set(i, {mat, base: isBlack ? 0.055 : 0.08});"
 )
 
-HIGHWAY_OPEN = "// 床\nconst floorMesh"
-HIGHWAY_OPEN_REPLACEMENT = "function buildHighway(){\n  const totalHWWidth = ACTIVE_TOTAL * LANE_UNIT;\n  // 古いメッシュを削除\n  while(hwGroup.children.length>0) hwGroup.remove(hwGroup.children[0]);\n  laneGlowMats = new Map();\n\n  // 床\n  const floorMesh"
+# 7b. 区切り線ループ: TOTAL_LANES → ACTIVE_TOTAL
+html = html.replace(
+    "// 区切り線\nfor(let i=0;i<=TOTAL_LANES;i++){\n"
+    "  const x = (i - TOTAL_LANES/2) * LANE_UNIT - LANE_GAP/2;",
+    "// 区切り線\nfor(let i=0;i<=ACTIVE_TOTAL;i++){\n"
+    "  const x = (i - ACTIVE_TOTAL/2) * LANE_UNIT - LANE_GAP/2;"
+)
 
-html = html.replace(HIGHWAY_OPEN, HIGHWAY_OPEN_REPLACEMENT)
+# 7c. hitLine3D の const を除去（外部 let hitLine3D に代入させる）
+html = html.replace(
+    "// ヒットライン(3D)\nconst hitLine3D = new THREE.Mesh(",
+    "// ヒットライン(3D)\nhitLine3D = new THREE.Mesh("
+)
 
-# hitLine3D の後（hwGroup.add(hitLine3D);）で関数を閉じる
+# 7d. 床〜hitLine3D を buildHighway() 関数で囲む
+html = html.replace(
+    "// 床\nconst floorMesh",
+    "function buildHighway(){\n"
+    "  const totalHWWidth = ACTIVE_TOTAL * LANE_UNIT;\n"
+    "  while(hwGroup.children.length>0) hwGroup.remove(hwGroup.children[0]);\n"
+    "  laneGlowMats = new Map();\n\n"
+    "// 床\nconst floorMesh"
+)
 html = html.replace(
     "hwGroup.add(hitLine3D);\n\n// 星",
-    "hwGroup.add(hitLine3D);\n}\n\nlet laneGlowMats = new Map();\nlet hitLine3D = null;\n\n// 星"
-)
-
-# hitLine3D を const から let に（関数内で再代入するため）
-html = html.replace(
-    "  const hitLine3D = new THREE.Mesh(\n"
-    "    new THREE.PlaneGeometry(totalHWWidth + 0.6, 0.07),",
-    "  hitLine3D = new THREE.Mesh(\n"
-    "    new THREE.PlaneGeometry(totalHWWidth + 0.6, 0.07),"
-)
-html = html.replace(
-    "  const floorMesh = new THREE.Mesh(\n"
-    "    new THREE.PlaneGeometry(totalHWWidth + 0.6, HIGHWAY_LEN),",
-    "  const floorMesh = new THREE.Mesh(\n"
-    "    new THREE.PlaneGeometry(totalHWWidth + 0.6, HIGHWAY_LEN),"
+    "hwGroup.add(hitLine3D);\n"
+    "} // end buildHighway\n\n"
+    "let laneGlowMats = new Map();\n"
+    "let hitLine3D = null;\n\n"
+    "// 星"
 )
 
 # ════════════════════════════════════════════════════════
@@ -611,6 +627,11 @@ checks = [
     ("TRAVEL_TIME", "TRAVEL_TIME 定数"),
     ("_BLACK_LANE_SET_COLOR", "白鍵/黒鍵カラー"),
     ("spawnNoteAtZ", "spawnNoteAtZ 関数"),
+    ("ACTIVE_LANES[_ai]", "レーンループ ACTIVE_LANES 化"),
+    ("ACTIVE_TOTAL/2", "区切り線 ACTIVE_TOTAL 化"),
+    ("hitLine3D = new THREE.Mesh", "hitLine3D const 除去"),
+    ("} // end buildHighway", "buildHighway 関数終端"),
+    ("// オートプレイスケジューラ", "AUTOPLAY_TICK in animate"),
 ]
 for needle, label in checks:
     if needle in html:
