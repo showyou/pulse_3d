@@ -82,7 +82,17 @@ EXTRA_CSS = """
 #autoplay-btn:disabled{opacity:0.3;cursor:default;}
 #autoplay-btn:not(:disabled):hover{background:#88f;color:#000;box-shadow:0 0 28px #88f;}
 """
-html = html.replace("</style>", EXTRA_CSS + "\n</style>")
+OCT_CSS = """
+/* オクターブシフト表示 */
+#oct-indicator{
+  position:fixed;top:14px;right:20px;z-index:11;
+  font-family:'Share Tech Mono',monospace;font-size:clamp(11px,1.8vw,18px);
+  letter-spacing:3px;color:rgba(255,200,80,0.0);
+  text-shadow:0 0 12px #fa0;transition:color 0.1s;pointer-events:none;
+}
+#oct-indicator.active{color:rgba(255,200,80,0.95);}
+"""
+html = html.replace("</style>", EXTRA_CSS + OCT_CSS + "\n</style>")
 
 # ════════════════════════════════════════════════════════
 # 2. HUD にプログレスバーとタイマー追加
@@ -91,6 +101,7 @@ html = html.replace(
     '<div id="keyboard-ui">',
     '<div id="autoplay-bar"><div id="autoplay-bar-fill"></div></div>\n'
     '<div id="autoplay-timer"></div>\n'
+    '<div id="oct-indicator">OCT +1</div>\n'
     '<div id="keyboard-ui">'
 )
 
@@ -307,18 +318,74 @@ html = html.replace(
 )
 
 # ════════════════════════════════════════════════════════
-# 12. triggerKey で未使用レーンを無効化
+# 12. triggerKey: 未使用レーン無効化 + オクターブシフト対応
 # ════════════════════════════════════════════════════════
 html = html.replace(
     "  const kd = ALL_KEYS[key];\n"
     "  if(!kd) return;\n"
     "\n"
-    "  playPianoNote(kd.freq);",
+    "  playPianoNote(kd.freq);\n"
+    "  spawnNote(kd.lane);\n"
+    "  triggerGlow(kd.lane);\n"
+    "\n"
+    "  // HUD\n"
+    "  bumpCombo();\n"
+    "  const mult = Math.max(1, Math.floor(combo/4));\n"
+    "  addScore(300*mult);\n"
+    "  showJudge('PERFECT!','#00ffee');\n"
+    "  showNotePop(kd.note, LANE_COLORS_HEX[kd.lane]);\n"
+    "\n"
+    "  // パーティクル\n"
+    "  spawnParticles(getLaneScreenX(kd.lane), getHitLineScreenY(), LANE_COLORS_HEX[kd.lane]);",
+
     "  const kd = ALL_KEYS[key];\n"
     "  if(!kd) return;\n"
     "  if(!ACTIVE_LANE_SET.has(kd.lane)) return;\n"
     "\n"
-    "  playPianoNote(kd.freq);"
+    "  const freq     = octShift ? kd.freq * 2 : kd.freq;\n"
+    "  const noteName = octShift ? kd.note.replace(/(\\d)$/, n => +n+1) : kd.note;\n"
+    "  playPianoNote(freq);\n"
+    "  spawnNote(kd.lane);\n"
+    "  triggerGlow(kd.lane);\n"
+    "\n"
+    "  // HUD\n"
+    "  bumpCombo();\n"
+    "  const mult = Math.max(1, Math.floor(combo/4));\n"
+    "  addScore(300*mult);\n"
+    "  showJudge('PERFECT!','#00ffee');\n"
+    "  showNotePop(noteName, LANE_COLORS_HEX[kd.lane]);\n"
+    "\n"
+    "  // パーティクル\n"
+    "  spawnParticles(getLaneScreenX(kd.lane), getHitLineScreenY(), LANE_COLORS_HEX[kd.lane]);"
+)
+
+# ════════════════════════════════════════════════════════
+# 12b. keydown/keyup で Shift を追跡
+# ════════════════════════════════════════════════════════
+html = html.replace(
+    "window.addEventListener('keydown',e=>{\n"
+    "  if(e.repeat) return;\n"
+    "  triggerKey(e.key.toLowerCase());\n"
+    "});\n"
+    "window.addEventListener('keyup',e=>{\n"
+    "  releaseKey(e.key.toLowerCase());\n"
+    "});",
+
+    "let octShift = false;\n"
+    "const octIndicator = document.getElementById('oct-indicator');\n"
+    "window.addEventListener('keydown',e=>{\n"
+    "  if(e.key==='Shift'){\n"
+    "    octShift=true; octIndicator.classList.add('active'); return;\n"
+    "  }\n"
+    "  if(e.repeat) return;\n"
+    "  triggerKey(e.key.toLowerCase());\n"
+    "});\n"
+    "window.addEventListener('keyup',e=>{\n"
+    "  if(e.key==='Shift'){\n"
+    "    octShift=false; octIndicator.classList.remove('active'); return;\n"
+    "  }\n"
+    "  releaseKey(e.key.toLowerCase());\n"
+    "});"
 )
 
 # ════════════════════════════════════════════════════════

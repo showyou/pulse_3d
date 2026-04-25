@@ -156,6 +156,15 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050810;font-family:
 #autoplay-btn:disabled{opacity:0.3;cursor:default;}
 #autoplay-btn:not(:disabled):hover{background:#88f;color:#000;box-shadow:0 0 28px #88f;}
 
+/* オクターブシフト表示 */
+#oct-indicator{
+  position:fixed;top:14px;right:20px;z-index:11;
+  font-family:'Share Tech Mono',monospace;font-size:clamp(11px,1.8vw,18px);
+  letter-spacing:3px;color:rgba(255,200,80,0.0);
+  text-shadow:0 0 12px #fa0;transition:color 0.1s;pointer-events:none;
+}
+#oct-indicator.active{color:rgba(255,200,80,0.95);}
+
 </style>
 </head>
 <body>
@@ -179,6 +188,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050810;font-family:
 
 <div id="autoplay-bar"><div id="autoplay-bar-fill"></div></div>
 <div id="autoplay-timer"></div>
+<div id="oct-indicator">OCT +1</div>
 <div id="keyboard-ui">
   <div id="black-row"></div>
   <div id="white-row"></div>
@@ -629,7 +639,9 @@ function triggerKey(key){
   if(!kd) return;
   if(!ACTIVE_LANE_SET.has(kd.lane)) return;
 
-  playPianoNote(kd.freq);
+  const freq     = octShift ? kd.freq * 2 : kd.freq;
+  const noteName = octShift ? kd.note.replace(/(\d)$/, n => +n+1) : kd.note;
+  playPianoNote(freq);
   spawnNote(kd.lane);
   triggerGlow(kd.lane);
 
@@ -638,7 +650,7 @@ function triggerKey(key){
   const mult = Math.max(1, Math.floor(combo/4));
   addScore(300*mult);
   showJudge('PERFECT!','#00ffee');
-  showNotePop(kd.note, LANE_COLORS_HEX[kd.lane]);
+  showNotePop(noteName, LANE_COLORS_HEX[kd.lane]);
 
   // パーティクル
   spawnParticles(getLaneScreenX(kd.lane), getHitLineScreenY(), LANE_COLORS_HEX[kd.lane]);
@@ -648,11 +660,19 @@ function releaseKey(key){
   if(keyDomMap[key]) keyDomMap[key].classList.remove('active');
 }
 
+let octShift = false;
+const octIndicator = document.getElementById('oct-indicator');
 window.addEventListener('keydown',e=>{
+  if(e.key==='Shift'){
+    octShift=true; octIndicator.classList.add('active'); return;
+  }
   if(e.repeat) return;
   triggerKey(e.key.toLowerCase());
 });
 window.addEventListener('keyup',e=>{
+  if(e.key==='Shift'){
+    octShift=false; octIndicator.classList.remove('active'); return;
+  }
   releaseKey(e.key.toLowerCase());
 });
 
