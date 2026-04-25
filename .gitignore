@@ -2,3 +2,9 @@
 .claude/
 __pycache__/
 *.pyc
+
+# Fumen data (copyright unclear)
+fumen.json
+fumen_min.json
+starmine_fumen.json
+files.zip
