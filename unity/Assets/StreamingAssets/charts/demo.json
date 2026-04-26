@@ -1,0 +1,35 @@
+{
+  "format": "pulse3d_v1",
+  "version": 1,
+  "meta": {
+    "title": "Demo",
+    "bpm": 120.0,
+    "duration": 10000
+  },
+  "notes": [
+    { "t": 1000,  "lanes": [0, 1],   "isLong": false, "holdMs": 0 },
+    { "t": 1500,  "lanes": [6, 7],   "isLong": false, "holdMs": 0 },
+    { "t": 2000,  "lanes": [2, 3],   "isLong": false, "holdMs": 0 },
+    { "t": 2000,  "lanes": [8, 9],   "isLong": false, "holdMs": 0 },
+    { "t": 2500,  "lanes": [4, 5],   "isLong": false, "holdMs": 0 },
+    { "t": 2500,  "lanes": [10, 11], "isLong": false, "holdMs": 0 },
+    { "t": 3000,  "lanes": [0, 1],   "isLong": true,  "holdMs": 600 },
+    { "t": 3000,  "lanes": [10, 11], "isLong": true,  "holdMs": 600 },
+    { "t": 4000,  "lanes": [2, 3],   "isLong": false, "holdMs": 0 },
+    { "t": 4000,  "lanes": [8, 9],   "isLong": false, "holdMs": 0 },
+    { "t": 4500,  "lanes": [4, 5],   "isLong": false, "holdMs": 0 },
+    { "t": 4500,  "lanes": [6, 7],   "isLong": false, "holdMs": 0 },
+    { "t": 5000,  "lanes": [0, 1],   "isLong": false, "holdMs": 0 },
+    { "t": 5250,  "lanes": [2, 3],   "isLong": false, "holdMs": 0 },
+    { "t": 5500,  "lanes": [4, 5],   "isLong": false, "holdMs": 0 },
+    { "t": 5750,  "lanes": [6, 7],   "isLong": false, "holdMs": 0 },
+    { "t": 6000,  "lanes": [8, 9],   "isLong": false, "holdMs": 0 },
+    { "t": 6250,  "lanes": [10, 11], "isLong": false, "holdMs": 0 },
+    { "t": 7000,  "lanes": [0, 1],   "isLong": true,  "holdMs": 1000 },
+    { "t": 7000,  "lanes": [6, 7],   "isLong": true,  "holdMs": 1000 },
+    { "t": 8500,  "lanes": [4, 5],   "isLong": false, "holdMs": 0 },
+    { "t": 8500,  "lanes": [8, 9],   "isLong": false, "holdMs": 0 },
+    { "t": 9000,  "lanes": [0, 1],   "isLong": false, "holdMs": 0 },
+    { "t": 9000,  "lanes": [10, 11], "isLong": false, "holdMs": 0 }
+  ]
+}
