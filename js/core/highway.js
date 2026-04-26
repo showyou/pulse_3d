@@ -11,6 +11,8 @@
  *   hitZ            ヒットラインZ  default: 4.2
  *   showSideBorders サイドボーダー  default: true
  *   showHitLights   ヒット時ポイントライト  default: true
+ *
+ * 戻り値に group を含む。scene.remove(group) でまとめて破棄可能。
  */
 export function buildHighway(scene, cfg) {
   const {
@@ -31,6 +33,10 @@ export function buildHighway(scene, cfg) {
     ? (baseLaneOpacity[i] ?? 0.08)
     : baseLaneOpacity;
 
+  // すべての geometry/light を group にまとめる（scene.remove(group) で一括削除可）
+  const group = new THREE.Group();
+  scene.add(group);
+
   // 床
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(hwWidth, highwayLen),
@@ -41,7 +47,7 @@ export function buildHighway(scene, cfg) {
   );
   floor.rotation.x = -Math.PI / 2;
   floor.position.set(0, -.01, -highwayLen / 2 + 10);
-  scene.add(floor);
+  group.add(floor);
 
   // 区切り線
   for (let i = 0; i <= numLanes; i++) {
@@ -52,7 +58,7 @@ export function buildHighway(scene, cfg) {
     );
     m.rotation.x = -Math.PI / 2;
     m.position.set(x, .001, -highwayLen / 2 + 10);
-    scene.add(m);
+    group.add(m);
   }
 
   // レーングロー帯
@@ -63,7 +69,7 @@ export function buildHighway(scene, cfg) {
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(laneGlowWidth, highwayLen), mat);
     mesh.rotation.x = -Math.PI / 2;
     mesh.position.set(getLaneX(i), .002, -highwayLen / 2 + 10);
-    scene.add(mesh);
+    group.add(mesh);
     laneGlowMats.push({ mat, base: bo });
   }
 
@@ -76,7 +82,7 @@ export function buildHighway(scene, cfg) {
       );
       m.rotation.x = -Math.PI / 2;
       m.position.set(x, .003, -highwayLen / 2 + 10);
-      scene.add(m);
+      group.add(m);
     }
   }
 
@@ -87,7 +93,7 @@ export function buildHighway(scene, cfg) {
   );
   hitLine3D.rotation.x = -Math.PI / 2;
   hitLine3D.position.set(0, 0.02, hitZ);
-  scene.add(hitLine3D);
+  group.add(hitLine3D);
 
   // ヒットポイントライト（レーンごと）
   const hitLights = [];
@@ -95,10 +101,10 @@ export function buildHighway(scene, cfg) {
     for (let i = 0; i < numLanes; i++) {
       const light = new THREE.PointLight(laneColors[i], 0, 9);
       light.position.set(getLaneX(i), .8, hitZ);
-      scene.add(light);
+      group.add(light);
       hitLights.push(light);
     }
   }
 
-  return { laneGlowMats, hitLine3D, hitLights, getLaneX, hwWidth };
+  return { laneGlowMats, hitLine3D, hitLights, getLaneX, hwWidth, group };
 }

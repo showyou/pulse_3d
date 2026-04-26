@@ -37,6 +37,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050810;font-family:
 .wkey:last-child{border-right:1px solid rgba(80,180,255,0.4);}
 .wkey.active{background:linear-gradient(to bottom,#00ffe5 0%,#66ffee 50%,#bbfffa 100%);
   box-shadow:0 0 24px #0ff,0 0 48px rgba(0,255,238,0.3),inset 0 -6px 12px rgba(0,200,200,0.2);}
+.wkey.disabled{opacity:0.22;cursor:default;pointer-events:none;
+  background:linear-gradient(to bottom,#1a2a38 0%,#223344 100%);
+  box-shadow:none;border-color:rgba(40,80,110,0.3);}
 .wkey .klabel{font-family:'Share Tech Mono',monospace;font-size:clamp(9px,1.4vw,14px);font-weight:700;color:rgba(0,30,60,0.5);}
 .wkey .knote{font-family:'Share Tech Mono',monospace;font-size:clamp(6px,0.9vw,11px);color:rgba(0,30,60,0.35);}
 .bkey{position:absolute;background:linear-gradient(to bottom,#0a1520 0%,#0d1b2a 60%,#152030 100%);
@@ -47,14 +50,31 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050810;font-family:
   height:100%;z-index:2;bottom:0;}
 .bkey.active{background:linear-gradient(to bottom,#00ddbb 0%,#006655 100%);
   box-shadow:0 0 20px #0fc,0 0 40px rgba(0,255,200,0.35);}
+.bkey.disabled{opacity:0.18;cursor:default;pointer-events:none;
+  background:linear-gradient(to bottom,#060c12 0%,#0a1018 100%);
+  box-shadow:none;border-color:rgba(20,50,70,0.2);}
 .bkey .klabel{font-family:'Share Tech Mono',monospace;font-size:clamp(6px,1vw,11px);font-weight:700;color:rgba(255,255,255,0.45);}
 .bkey .knote{font-family:'Share Tech Mono',monospace;font-size:clamp(5px,0.7vw,9px);color:rgba(255,255,255,0.28);}
 #rotate-warn{display:none;position:fixed;top:0;left:0;width:100%;height:100%;z-index:100;
   background:#000;flex-direction:column;align-items:center;justify-content:center;gap:16px;
   color:#0ff;font-size:24px;letter-spacing:4px;}
 @media (max-width:600px) and (orientation:portrait){#rotate-warn{display:flex;}}
+/* オートプレイ進捗 */
+#autoplay-bar{position:fixed;bottom:25vh;left:0;width:100%;height:3px;z-index:16;
+  background:rgba(0,255,238,0.12);pointer-events:none;}
+#autoplay-bar-fill{height:100%;background:linear-gradient(to right,#0ff,#88f);width:0%;box-shadow:0 0 8px #0ff;}
+#autoplay-timer{position:fixed;bottom:calc(25vh + 8px);right:8px;
+  font-family:'Share Tech Mono',monospace;font-size:12px;
+  color:rgba(0,255,238,0.6);z-index:16;pointer-events:none;letter-spacing:2px;}
+/* オクターブシフト */
+#oct-indicator{position:fixed;top:14px;right:20px;z-index:11;
+  font-family:'Share Tech Mono',monospace;font-size:clamp(11px,1.8vw,18px);
+  letter-spacing:3px;color:rgba(255,200,80,0.0);
+  text-shadow:0 0 12px #fa0;transition:color 0.1s;pointer-events:none;}
+#oct-indicator.active{color:rgba(255,200,80,0.95);}
+/* スタートスクリーン */
 #start-screen{position:fixed;top:0;left:0;width:100%;height:100%;z-index:30;
-  background:rgba(0,2,15,0.94);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;}
+  background:rgba(0,2,15,0.94);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;}
 #start-screen h1{font-size:clamp(32px,8vw,76px);font-weight:900;letter-spacing:8px;
   background:linear-gradient(135deg,#0ff 0%,#88f 40%,#f0f 70%,#ff8800 100%);
   -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
@@ -64,6 +84,23 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050810;font-family:
   font-weight:700;letter-spacing:5px;border:2px solid #0ff;background:transparent;color:#0ff;
   cursor:pointer;border-radius:4px;transition:all 0.2s;}
 #start-btn:hover{background:#0ff;color:#000;box-shadow:0 0 28px #0ff;}
+.ss-or{font-family:'Share Tech Mono',monospace;font-size:clamp(9px,1.2vw,13px);color:rgba(255,255,255,0.3);letter-spacing:3px;}
+.file-section{display:flex;flex-direction:column;align-items:center;gap:5px;width:100%;max-width:420px;}
+.file-section-label{font-family:'Share Tech Mono',monospace;
+  font-size:clamp(8px,1.1vw,11px);color:rgba(255,255,255,0.35);letter-spacing:3px;text-transform:uppercase;}
+.file-pick-btn{padding:7px 22px;font-family:'Orbitron',sans-serif;
+  font-size:clamp(9px,1.3vw,13px);letter-spacing:3px;
+  border:1px solid rgba(0,255,238,0.4);background:rgba(0,60,100,0.25);
+  color:#88eeff;cursor:pointer;border-radius:3px;transition:all 0.2s;width:100%;}
+.file-pick-btn:hover{background:rgba(0,100,150,0.4);border-color:#0ff;}
+.file-status{font-family:'Share Tech Mono',monospace;
+  font-size:clamp(8px,1.1vw,11px);color:rgba(0,255,200,0.55);letter-spacing:1px;min-height:1em;}
+#autoplay-btn{padding:14px 52px;font-family:'Orbitron',sans-serif;
+  font-size:clamp(14px,2.2vw,22px);font-weight:700;letter-spacing:5px;
+  border:2px solid #88f;background:transparent;color:#88f;cursor:pointer;
+  border-radius:4px;transition:all 0.2s;}
+#autoplay-btn:disabled{opacity:0.3;cursor:default;}
+#autoplay-btn:not(:disabled):hover{background:#88f;color:#000;box-shadow:0 0 28px #88f;}
 #pfx{position:fixed;top:0;left:0;width:100%;height:100%;z-index:8;pointer-events:none;}
 </style>
 </head>
@@ -86,6 +123,10 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050810;font-family:
   <div id="note-name-pop"></div>
 </div>
 
+<div id="autoplay-bar"><div id="autoplay-bar-fill"></div></div>
+<div id="autoplay-timer"></div>
+<div id="oct-indicator">OCT +1</div>
+
 <div id="keyboard-ui">
   <div id="black-row"></div>
   <div id="white-row"></div>
@@ -97,17 +138,32 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050810;font-family:
   <div class="ss-hint">
     白鍵 (ASDの段): <span style="letter-spacing:1px">A S D F G H J K L</span><br>
     黒鍵 (QWEの段): <span style="letter-spacing:1px">W E &nbsp; T Y U &nbsp; O P</span><br>
-    ピアノと同じ配置
+    Shift = オクターブ +1
   </div>
   <button id="start-btn">▶ START</button>
+  <div class="ss-or">— or —</div>
+  <div class="file-section">
+    <div class="file-section-label">譜面ファイル</div>
+    <input type="file" id="fumen-input" accept=".json" style="display:none">
+    <button class="file-pick-btn" id="fumen-file-btn">♩ 譜面 JSON を選択</button>
+    <div class="file-status" id="fumen-status">未選択</div>
+  </div>
+  <div class="file-section">
+    <div class="file-section-label">BGM ファイル（任意）</div>
+    <input type="file" id="bgm-input" accept="audio/*" style="display:none">
+    <button class="file-pick-btn" id="bgm-file-btn">♪ 伴奏 audio を選択</button>
+    <div class="file-status" id="bgm-status">未選択（なしでも再生可）</div>
+  </div>
+  <button id="autoplay-btn" disabled>▶ AUTOPLAY</button>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script type="module">
 import { createRenderer, createScene, createCamera, setupResize } from './js/core/renderer.js';
 import { createPianoMode } from './js/modes/piano.js';
+import { getAudioCtx } from './js/core/audio.js';
 
-const canvas   = document.getElementById('c');
+const canvas    = document.getElementById('c');
 const pfxCanvas = document.getElementById('pfx');
 pfxCanvas.width  = innerWidth;
 pfxCanvas.height = innerHeight;
@@ -115,18 +171,51 @@ pfxCanvas.height = innerHeight;
 const renderer = createRenderer(canvas);
 const scene    = createScene(0.042);
 const camera   = createCamera(60);
+
+const mode = createPianoMode(scene, camera, pfxCanvas);
+
 setupResize(renderer, camera, () => {
   mode.resizePfx();
   mode.buildPianoUI();
 });
 
-const mode = createPianoMode(scene, camera, pfxCanvas);
-
-document.getElementById('start-btn').addEventListener('click', () => {
-  mode.start();
+// 譜面ファイル選択
+document.getElementById('fumen-file-btn').addEventListener('click', () =>
+  document.getElementById('fumen-input').click()
+);
+document.getElementById('fumen-input').addEventListener('change', async function () {
+  const f = this.files[0]; if (!f) return;
+  document.getElementById('fumen-status').textContent = '読み込み中...';
+  try {
+    const data = JSON.parse(await f.text());
+    mode.loadFumenData(data);
+  } catch (e) {
+    document.getElementById('fumen-status').textContent = '⚠ ' + e.message;
+  }
 });
 
-window.addEventListener('keydown', e => { if (!e.repeat) mode.handleKeyDown(e.key); });
+// BGM ファイル選択
+document.getElementById('bgm-file-btn').addEventListener('click', () =>
+  document.getElementById('bgm-input').click()
+);
+document.getElementById('bgm-input').addEventListener('change', async function () {
+  const f = this.files[0]; if (!f) return;
+  const statusEl = document.getElementById('bgm-status');
+  statusEl.textContent = '読み込み中...';
+  try {
+    const ctx = getAudioCtx();
+    const buf = await ctx.decodeAudioData(await f.arrayBuffer());
+    mode.setBgmBuffer(buf);
+    statusEl.textContent = '✓ ' + f.name;
+  } catch (e) {
+    statusEl.textContent = '⚠ ' + e.message;
+  }
+});
+
+document.getElementById('start-btn').addEventListener('click', () => mode.start());
+document.getElementById('autoplay-btn').addEventListener('click', () => mode.startAutoplay());
+
+window.addEventListener('keydown', e => { if (!e.repeat || e.key === 'Shift') mode.handleKeyDown(e.key); });
 window.addEventListener('keyup',   e => mode.handleKeyUp(e.key));
 
 let lastTime = performance.now();
