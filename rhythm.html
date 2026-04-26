@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>PULSE 3D — RHYTHM</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{width:100%;height:100%;overflow:hidden;background:#000;touch-action:none;}
+  body{font-family:'Orbitron',monospace;color:#fff;}
+  #bg-video{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;display:none;}
+  #c{display:block;width:100%;height:100%;position:relative;z-index:1;}
+  body::after{
+    content:'';position:fixed;inset:0;
+    background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.12) 2px,rgba(0,0,0,0.12) 3px);
+    pointer-events:none;z-index:50;
+  }
+  #hud{position:fixed;top:0;left:0;z-index:40;padding:10px 16px 8px;
+    background:linear-gradient(135deg,rgba(0,0,0,0.7),transparent);pointer-events:none;}
+  #song-title{font-size:7px;letter-spacing:4px;color:rgba(255,255,255,0.3);margin-bottom:3px;}
+  #score{font-size:clamp(32px,5vw,48px);font-weight:900;letter-spacing:2px;
+    text-shadow:0 0 20px rgba(0,200,255,.9),0 0 40px rgba(0,200,255,.4);transition:transform .07s;display:block;}
+  #acc{font-family:'Share Tech Mono',monospace;font-size:9px;color:rgba(255,255,255,.38);letter-spacing:2px;margin-top:2px;}
+  #combo-wrap{position:fixed;right:160px;top:50%;transform:translateY(-50%);
+    z-index:40;text-align:right;pointer-events:none;padding:10px 16px 8px;}
+  #combo{font-size:clamp(44px,7vw,72px);font-weight:900;letter-spacing:2px;color:#fff;
+    text-shadow:0 0 20px rgba(0,200,255,.9),0 0 40px rgba(0,200,255,.4);line-height:1;transition:transform .07s;}
+  #combo-label{font-size:8px;letter-spacing:5px;color:rgba(0,200,255,.55);margin-top:3px;}
+  #prog-wrap{position:fixed;top:0;left:0;right:0;z-index:60;height:2px;background:rgba(255,255,255,0.07);}
+  #prog{height:100%;width:0%;background:linear-gradient(90deg,#00c8ff,#ff2d78,#aaff00,#ff9500);
+    box-shadow:0 0 6px rgba(0,200,255,.5);}
+  #judgment{position:fixed;left:50%;top:38%;transform:translateX(-50%);
+    font-size:clamp(36px,7vw,64px);font-weight:900;letter-spacing:8px;
+    pointer-events:none;z-index:60;opacity:0;white-space:nowrap;transition:opacity .04s;
+    text-transform:uppercase;-webkit-text-stroke:2px rgba(0,0,0,0.85);paint-order:stroke fill;
+    filter:drop-shadow(0 2px 8px rgba(0,0,0,0.9)) drop-shadow(0 0 20px currentColor);}
+  #keylabels{position:fixed;bottom:6px;left:0;right:0;display:flex;justify-content:center;z-index:40;}
+  .klabel{font-size:9px;letter-spacing:2px;color:rgba(255,255,255,0.2);text-align:center;width:16.66%;transition:color .06s,text-shadow .06s;}
+  .klabel.active{color:#fff;text-shadow:0 0 10px currentColor;}
+  #overlay{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,0.9);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;transition:opacity .4s;}
+  #overlay.hidden{opacity:0;pointer-events:none;}
+  #overlay h1{font-size:clamp(28px,6vw,52px);font-weight:900;letter-spacing:8px;
+    background:linear-gradient(90deg,#00c8ff,#ff2d78,#aaff00,#ff9500,#00c8ff);
+    background-size:200%;-webkit-background-clip:text;-webkit-text-fill-color:transparent;
+    animation:shimmer 3s linear infinite;}
+  @keyframes shimmer{to{background-position:200% center;}}
+  #overlay p{font-size:9px;letter-spacing:4px;color:rgba(255,255,255,.3);}
+  .ov-btn{padding:10px 36px;font-family:'Orbitron',monospace;font-size:12px;font-weight:700;
+    letter-spacing:5px;background:transparent;border:1px solid rgba(0,200,255,.55);color:#00c8ff;
+    cursor:pointer;text-transform:uppercase;box-shadow:0 0 16px rgba(0,200,255,.15);transition:all .2s;}
+  .ov-btn:hover,.ov-btn:active{background:rgba(0,200,255,.1);box-shadow:0 0 32px rgba(0,200,255,.4);}
+  #video-section{display:flex;flex-direction:column;align-items:center;gap:8px;}
+  #video-label{font-size:8px;letter-spacing:3px;color:rgba(255,255,255,.22);}
+  #video-input{display:none;}
+  #video-pick{padding:7px 22px;font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:3px;
+    background:transparent;border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.35);
+    cursor:pointer;text-transform:uppercase;transition:all .2s;}
+  #video-pick:hover{border-color:rgba(255,255,255,.38);color:rgba(255,255,255,.65);}
+  #video-name{font-family:'Share Tech Mono',monospace;font-size:9px;color:rgba(0,200,255,.55);letter-spacing:2px;}
+  .key-hint{font-family:'Share Tech Mono',monospace;font-size:9px;color:rgba(255,255,255,.17);letter-spacing:2px;text-align:center;}
+  #result-table{font-family:'Share Tech Mono',monospace;font-size:12px;color:rgba(255,255,255,.5);line-height:2.2;letter-spacing:3px;text-align:center;}
+  #judge-line{position:fixed;left:0;right:0;z-index:30;height:4px;display:none;top:80%;
+    background:linear-gradient(90deg,transparent 5%,#ff2222 20%,#ff5555 50%,#ff2222 80%,transparent 95%);
+    box-shadow:0 0 8px 2px rgba(255,30,30,0.9),0 0 18px 4px rgba(255,0,0,0.35);pointer-events:none;}
+  #portrait-warn{display:none;position:fixed;inset:0;z-index:200;background:#000;
+    flex-direction:column;align-items:center;justify-content:center;gap:16px;}
+  #portrait-warn .big{font-size:40px;}
+  #portrait-warn p{font-size:11px;letter-spacing:4px;color:rgba(255,255,255,.45);}
+  #portrait-warn small{font-size:8px;letter-spacing:2px;color:rgba(255,255,255,.2);}
+  @media (orientation:portrait) and (pointer:coarse){#portrait-warn{display:flex;}}
+  #song-info{font-family:'Share Tech Mono',monospace;font-size:10px;color:rgba(255,255,255,.5);letter-spacing:3px;}
+</style>
+</head>
+<body>
+<div id="portrait-warn">
+  <div class="big">⟳</div>
+  <p>ROTATE DEVICE</p>
+  <small>LANDSCAPE MODE REQUIRED</small>
+</div>
+
+<video id="bg-video" playsinline></video>
+<div id="prog-wrap"><div id="prog"></div></div>
+<canvas id="c"></canvas>
+
+<div id="hud">
+  <span id="song-title">PULSE 3D // RHYTHM</span>
+  <span id="score">000000</span>
+  <div id="acc">ACC —%</div>
+</div>
+<div id="combo-wrap">
+  <div id="combo">—</div>
+  <div id="combo-label">COMBO</div>
+</div>
+
+<div id="judge-line"></div>
+<div id="judgment"></div>
+<div id="keylabels"></div>
+
+<div id="overlay">
+  <h1>PULSE 3D</h1>
+  <div id="song-info">LOADING...</div>
+  <div id="video-section">
+    <div id="video-label">BACKGROUND VIDEO (OPTIONAL)</div>
+    <button id="video-pick">SELECT VIDEO FILE</button>
+    <input type="file" id="video-input" accept="video/*">
+    <div id="video-name">— no file selected —</div>
+  </div>
+  <div style="display:flex;gap:16px;">
+    <button class="ov-btn" id="btn-start">START</button>
+    <button class="ov-btn" id="btn-auto" style="border-color:rgba(170,255,0,.55);color:#aaff00;box-shadow:0 0 16px rgba(170,255,0,.15);">AUTO</button>
+  </div>
+  <div class="key-hint">A S D &nbsp;&nbsp; J K L — hold for long notes</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script type="module">
+import { createRenderer, createScene, createCamera, setupResize } from './js/core/renderer.js';
+import { createRhythmMode } from './js/modes/rhythm.js';
+
+const canvas   = document.getElementById('c');
+const renderer = createRenderer(canvas);
+const scene    = createScene(0.008);
+const camera   = createCamera(65);
+setupResize(renderer, camera);
+
+const mode = createRhythmMode(scene, camera);
+
+// 動画背景
+let videoEl = null;
+document.getElementById('video-input').addEventListener('change', function () {
+  const f = this.files[0]; if (!f) return;
+  document.getElementById('video-name').textContent = f.name;
+  if (window._vBlob) URL.revokeObjectURL(window._vBlob);
+  window._vBlob = URL.createObjectURL(f);
+  const v = document.getElementById('bg-video');
+  v.src = window._vBlob; v.load(); videoEl = v;
+});
+document.getElementById('video-pick').addEventListener('click', () =>
+  document.getElementById('video-input').click()
+);
+
+// 楽曲メタデータ + 譜面ロード
+const meta = await fetch('./songs/metadata.json').then(r => r.json());
+const song = meta.find(s => s.mode === 'rhythm') ?? meta[0];
+document.getElementById('song-title').textContent = `PULSE 3D // ${song.title?.toUpperCase() ?? 'RHYTHM'}`;
+document.getElementById('song-info').textContent  = song.title ?? '';
+
+const chart = await fetch('./' + song.chart).then(r => r.json());
+mode.loadChart(chart);
+document.getElementById('song-info').textContent = song.title ?? '';
+
+function doStart(auto) {
+  if (videoEl) { videoEl.style.display = 'block'; videoEl.play().catch(() => {}); }
+  else mode.setupFallbackBg();
+  mode.start(auto);
+}
+
+document.getElementById('btn-start').addEventListener('click', () => doStart(false));
+document.getElementById('btn-auto').addEventListener('click',  () => doStart(true));
+
+// キー入力
+document.addEventListener('keydown', e => { if (!e.repeat) mode.handleKeyDown(e.key); });
+document.addEventListener('keyup',   e => mode.handleKeyUp(e.key));
+
+// レンダーループ
+const clock = new THREE.Clock();
+(function animate() {
+  requestAnimationFrame(animate);
+  mode.update(clock.getDelta());
+  renderer.render(scene, camera);
+})();
+</script>
+</body>
+</html>

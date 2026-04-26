@@ -1,0 +1,10 @@
+[
+  {
+    "id": "starmine",
+    "title": "Starmine",
+    "bpm": 136.0,
+    "duration": 110000,
+    "mode": "rhythm",
+    "chart": "charts/starmine.json"
+  }
+]

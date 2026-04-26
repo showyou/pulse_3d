@@ -1,0 +1,1142 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>PULSE 3D</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { width:100%; height:100%; overflow:hidden; background:#000; touch-action:none; }
+  body { font-family:'Orbitron',monospace; color:#fff; }
+  #bg-video {
+    position:fixed; inset:0; width:100%; height:100%;
+    object-fit:cover; z-index:0; display:none;
+  }
+  #c { display:block; width:100%; height:100%; position:relative; z-index:1; }
+  body::after {
+    content:''; position:fixed; inset:0;
+    background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.12) 2px,rgba(0,0,0,0.12) 3px);
+    pointer-events:none; z-index:50;
+  }
+  #hud {
+    position:fixed; top:0; left:0; z-index:40;
+    padding:10px 16px 8px;
+    background:linear-gradient(135deg,rgba(0,0,0,0.7),transparent);
+    pointer-events:none;
+  }
+  #song-title { font-size:7px; letter-spacing:4px; color:rgba(255,255,255,0.3); margin-bottom:3px; }
+  #score { font-size:clamp(32px,5vw,48px); font-weight:900; letter-spacing:2px; text-shadow:0 0 20px rgba(0,200,255,.9),0 0 40px rgba(0,200,255,.4); transition:transform .07s; display:block; }
+  #acc   { font-family:'Share Tech Mono',monospace; font-size:9px; color:rgba(255,255,255,.38); letter-spacing:2px; margin-top:2px; }
+  /* コンボ: 画面右中央 */
+  #combo-wrap {
+    position:fixed; right:160px; top:50%; transform:translateY(-50%);
+    z-index:40; text-align:right; pointer-events:none;
+    padding:10px 16px 8px;
+  }
+  #combo { font-size:clamp(44px,7vw,72px); font-weight:900; letter-spacing:2px; color:#fff; text-shadow:0 0 20px rgba(0,200,255,.9),0 0 40px rgba(0,200,255,.4); line-height:1; transition:transform .07s; }
+  #combo-label { font-size:8px; letter-spacing:5px; color:rgba(0,200,255,.55); margin-top:3px; }
+  #prog-wrap { position:fixed; top:0; left:0; right:0; z-index:60; height:2px; background:rgba(255,255,255,0.07); }
+  #prog { height:100%; width:0%; background:linear-gradient(90deg,#00c8ff,#ff2d78,#aaff00,#ff9500); box-shadow:0 0 6px rgba(0,200,255,.5); }
+  #judgment {
+    position:fixed; left:50%; top:38%; transform:translateX(-50%);
+    font-size:clamp(36px,7vw,64px); font-weight:900; letter-spacing:8px;
+    pointer-events:none; z-index:60; opacity:0; white-space:nowrap; transition:opacity .04s;
+    text-transform:uppercase;
+    -webkit-text-stroke:2px rgba(0,0,0,0.85);
+    paint-order:stroke fill;
+    filter:drop-shadow(0 2px 8px rgba(0,0,0,0.9)) drop-shadow(0 0 20px currentColor);
+  }
+  #keylabels { position:fixed; bottom:6px; left:0; right:0; display:flex; justify-content:center; z-index:40; }
+  .klabel {
+    font-size:9px; letter-spacing:2px; color:rgba(255,255,255,0.2);
+    text-align:center; width:16.66%; transition:color .06s, text-shadow .06s;
+  }
+  .klabel.active { color:#fff; text-shadow:0 0 10px currentColor; }
+  #overlay {
+    position:fixed; inset:0; z-index:100;
+    background:rgba(0,0,0,0.9);
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px;
+    transition:opacity .4s;
+  }
+  #overlay.hidden { opacity:0; pointer-events:none; }
+  #overlay h1 {
+    font-size:clamp(28px,6vw,52px); font-weight:900; letter-spacing:8px;
+    background:linear-gradient(90deg,#00c8ff,#ff2d78,#aaff00,#ff9500,#00c8ff);
+    background-size:200%; -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+    animation:shimmer 3s linear infinite;
+  }
+  @keyframes shimmer { to { background-position:200% center; } }
+  #overlay p { font-size:9px; letter-spacing:4px; color:rgba(255,255,255,.3); }
+  .ov-btn {
+    padding:10px 36px; font-family:'Orbitron',monospace; font-size:12px;
+    font-weight:700; letter-spacing:5px; background:transparent;
+    border:1px solid rgba(0,200,255,.55); color:#00c8ff; cursor:pointer;
+    text-transform:uppercase; box-shadow:0 0 16px rgba(0,200,255,.15); transition:all .2s;
+  }
+  .ov-btn:hover, .ov-btn:active { background:rgba(0,200,255,.1); box-shadow:0 0 32px rgba(0,200,255,.4); }
+  #video-section { display:flex; flex-direction:column; align-items:center; gap:8px; }
+  #video-label { font-size:8px; letter-spacing:3px; color:rgba(255,255,255,.22); }
+  #video-input { display:none; }
+  #video-pick {
+    padding:7px 22px; font-family:'Share Tech Mono',monospace; font-size:9px;
+    letter-spacing:3px; background:transparent; border:1px solid rgba(255,255,255,.15);
+    color:rgba(255,255,255,.35); cursor:pointer; text-transform:uppercase; transition:all .2s;
+  }
+  #video-pick:hover { border-color:rgba(255,255,255,.38); color:rgba(255,255,255,.65); }
+  #video-name { font-family:'Share Tech Mono',monospace; font-size:9px; color:rgba(0,200,255,.55); letter-spacing:2px; }
+  .key-hint { font-family:'Share Tech Mono',monospace; font-size:9px; color:rgba(255,255,255,.17); letter-spacing:2px; text-align:center; }
+  #result-table { font-family:'Share Tech Mono',monospace; font-size:12px; color:rgba(255,255,255,.5); line-height:2.2; letter-spacing:3px; text-align:center; }
+  #portrait-warn {
+    display:none; position:fixed; inset:0; z-index:200; background:#000;
+    flex-direction:column; align-items:center; justify-content:center; gap:16px;
+  }
+  #portrait-warn .big { font-size:40px; }
+  #portrait-warn p { font-size:11px; letter-spacing:4px; color:rgba(255,255,255,.45); }
+  #portrait-warn small { font-size:8px; letter-spacing:2px; color:rgba(255,255,255,.2); }
+  @media (orientation:portrait) and (pointer:coarse) { #portrait-warn { display:flex; } }
+  /* 赤ジャッジライン */
+  #judge-line {
+    position:fixed; left:0; right:0; z-index:30;
+    height:4px;
+    background:linear-gradient(90deg, transparent 5%, #ff2222 20%, #ff5555 50%, #ff2222 80%, transparent 95%);
+    box-shadow:0 0 8px 2px rgba(255,30,30,0.9), 0 0 18px 4px rgba(255,0,0,0.35);
+    pointer-events:none;
+    display:none;
+    top: 80%;
+  }
+</style>
+</head>
+<body>
+
+<div id="portrait-warn">
+  <div class="big">⟳</div>
+  <p>ROTATE DEVICE</p>
+  <small>LANDSCAPE MODE REQUIRED</small>
+</div>
+
+<video id="bg-video" playsinline></video>
+<div id="prog-wrap"><div id="prog"></div></div>
+<canvas id="c"></canvas>
+
+<div id="hud">
+  <span id="song-title">PULSE 3D // 12-KEY DEMO</span>
+  <span id="score">000000</span>
+  <div id="acc">ACC —%</div>
+</div>
+<div id="combo-wrap">
+  <div id="combo">—</div>
+  <div id="combo-label">COMBO</div>
+</div>
+
+<div id="judge-line"></div>
+<div id="judgment"></div>
+<div id="keylabels"></div>
+
+<div id="overlay">
+  <h1>PULSE 3D</h1>
+  <p>12-KEY // LONG NOTES DEMO</p>
+  <div id="video-section">
+    <div id="video-label">BACKGROUND VIDEO (OPTIONAL)</div>
+    <button id="video-pick">SELECT VIDEO FILE</button>
+    <input type="file" id="video-input" accept="video/*">
+    <div id="video-name">— no file selected —</div>
+  </div>
+  <div style="display:flex;gap:16px;">
+    <button class="ov-btn" onclick="startGame(false)">START</button>
+    <button class="ov-btn" style="border-color:rgba(170,255,0,.55);color:#aaff00;box-shadow:0 0 16px rgba(170,255,0,.15);" onclick="startGame(true)">AUTO</button>
+  </div>
+  <div class="key-hint">A S D &nbsp;&nbsp; J K L — hold for long notes</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ═══════════════════════════════════════
+//  CONFIG
+// ═══════════════════════════════════════
+const NUM_LANES       = 12;
+const LANE_COLORS_HEX = [
+  0x00c8ff,0x0074ff,0x8a2be2,0xcc44ff,0xff2d78,0xff6600,
+  0xff9500,0xd4ff00,0x88ff00,0x00ff88,0x00e0c8,0x00aaff
+];
+const KEY_LABELS = ['A','S','D','J','K','L'];
+// 6キー → 各キーが2レーン担当
+const KEYS_MAP = {
+  'a':[0,1], 's':[2,3], 'd':[4,5],
+  'j':[6,7], 'k':[8,9], 'l':[10,11]
+};
+
+const LANE_SPACING  = 0.85;
+const HIGHWAY_W     = NUM_LANES * LANE_SPACING + 0.4;
+const HIGHWAY_LEN   = 130;
+const NOTE_Z_SPAWN  = -95;
+const NOTE_Z_HIT    = 4.2;
+const NOTE_SPEED    = 36;
+const HIT_Z_PERF    = 2.2;
+const HIT_Z_GOOD    = 4.2;
+const SONG_DURATION = 110000;
+const LONG_TICK_MS  = 100;
+
+const LANE_X = Array.from({length:NUM_LANES},(_,i)=>(i-(NUM_LANES-1)/2)*LANE_SPACING);
+
+// Key label DOM
+const klRow=document.getElementById('keylabels');
+KEY_LABELS.forEach((_,i)=>{
+  const d=document.createElement('div');
+  d.className='klabel'; d.id='kl'+i; d.textContent=KEY_LABELS[i];
+  klRow.appendChild(d);
+});
+
+// ═══════════════════════════════════════
+//  RENDERER
+// ═══════════════════════════════════════
+const canvas   = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({canvas,antialias:true,alpha:true});
+renderer.setClearColor(0x000000,0);
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth,innerHeight);
+
+const scene = new THREE.Scene();
+scene.fog   = new THREE.FogExp2(0x000000,0.008);
+
+const camera = new THREE.PerspectiveCamera(65,innerWidth/innerHeight,0.1,230);
+camera.position.set(0,5.5,9);
+camera.lookAt(0,0,-8);
+
+window.addEventListener('resize',()=>{
+  renderer.setSize(innerWidth,innerHeight);
+  camera.aspect=innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+});
+
+// ═══════════════════════════════════════
+//  VIDEO BG
+// ═══════════════════════════════════════
+let videoEl=null, videoTexture=null;
+function loadVideo(inp){
+  const f=inp.files[0]; if(!f) return;
+  document.getElementById('video-name').textContent=f.name;
+  if(window._videoBlobUrl) URL.revokeObjectURL(window._videoBlobUrl);
+  window._videoBlobUrl = URL.createObjectURL(f);
+  const v = document.getElementById('bg-video');
+  v.src = window._videoBlobUrl;
+  v.load();
+  videoEl = v;
+}
+// file input のイベントをJS側で登録（ローカルファイルのCSP対策）
+document.addEventListener('DOMContentLoaded', function(){
+  const fi = document.getElementById('video-input');
+  if(fi) fi.addEventListener('change', function(){ loadVideo(this); });
+  const vp = document.getElementById('video-pick');
+  if(vp) vp.addEventListener('click', function(){ document.getElementById('video-input').click(); });
+});
+function setupVideoBg(){
+  if(!videoEl) return;
+  videoEl.style.display='block';
+  videoEl.play().catch(()=>{});
+}
+function setupFallbackBg(){
+  // 動画なし: 背景は body の黒のまま、星だけ追加
+  const n=2800, pos=new Float32Array(n*3);
+  for(let i=0;i<n*3;i++) pos[i]=(Math.random()-.5)*230;
+  const geo=new THREE.BufferGeometry();
+  geo.setAttribute('position',new THREE.BufferAttribute(pos,3));
+  scene.add(new THREE.Points(geo,new THREE.PointsMaterial({color:0xffffff,size:.18,transparent:true,opacity:.5})));
+}
+
+// ═══════════════════════════════════════
+//  HIGHWAY
+// ═══════════════════════════════════════
+const hwMesh=new THREE.Mesh(
+  new THREE.PlaneGeometry(HIGHWAY_W,HIGHWAY_LEN),
+  new THREE.MeshStandardMaterial({color:0x030810,roughness:.9,metalness:.1,transparent:true,opacity:.45})
+);
+hwMesh.rotation.x=-Math.PI/2;
+hwMesh.position.set(0,-.01,-HIGHWAY_LEN/2+10);
+scene.add(hwMesh);
+
+for(let i=0;i<=NUM_LANES;i++){
+  const x=-HIGHWAY_W/2+i*LANE_SPACING;
+  const m=new THREE.Mesh(
+    new THREE.PlaneGeometry(.025,HIGHWAY_LEN),
+    new THREE.MeshBasicMaterial({color:0x4488cc,transparent:true,opacity:.18})
+  );
+  m.rotation.x=-Math.PI/2; m.position.set(x,.001,-HIGHWAY_LEN/2+10); scene.add(m);
+}
+
+const glowLines=[];
+LANE_X.forEach((x,i)=>{
+  const m=new THREE.Mesh(
+    new THREE.PlaneGeometry(LANE_SPACING*.88,HIGHWAY_LEN),
+    new THREE.MeshBasicMaterial({color:LANE_COLORS_HEX[i],transparent:true,opacity:.08})
+  );
+  m.rotation.x=-Math.PI/2; m.position.set(x,.002,-HIGHWAY_LEN/2+10);
+  scene.add(m); glowLines.push(m);
+});
+
+[-HIGHWAY_W/2,HIGHWAY_W/2].forEach(x=>{
+  const m=new THREE.Mesh(
+    new THREE.PlaneGeometry(.08,HIGHWAY_LEN),
+    new THREE.MeshBasicMaterial({color:0x00c8ff,transparent:true,opacity:.35})
+  );
+  m.rotation.x=-Math.PI/2; m.position.set(x,.003,-HIGHWAY_LEN/2+10); scene.add(m);
+});
+
+// ═══════════════════════════════════════
+//  HIT LINE (横線)
+// ═══════════════════════════════════════
+// 各レーンのライトだけ残す（フラッシュ用）
+const hitButtons=[];
+LANE_X.forEach((x,i)=>{
+  const mat=null; // 箱なし
+  const light=new THREE.PointLight(LANE_COLORS_HEX[i],0,9);
+  light.position.set(x,.8,NOTE_Z_HIT); scene.add(light);
+  hitButtons.push({mat,light});
+});
+
+// 赤ジャッジライン → CSS オーバーレイで描画（3Dだとカメラ角度で見えなくなるため）
+// 位置はJS側でレンダリング後に調整
+
+// ═══════════════════════════════════════
+//  LIGHTS
+// ═══════════════════════════════════════
+scene.add(new THREE.AmbientLight(0x081020,1.3));
+const sun=new THREE.DirectionalLight(0xffffff,.45);
+sun.position.set(0,12,6); scene.add(sun);
+
+// ═══════════════════════════════════════
+//  NORMAL NOTE POOL
+// ═══════════════════════════════════════
+const notePool=[];
+// lanes: 単レーン番号 or レーン番号の配列
+// 複数レーンなら中心 x と合算幅で1つのボックスを作る
+const NOTE_COLOR = 0xff55aa;  // 通常ノーツ統一色（ピンク）
+const LONG_COLOR = 0x44ffcc;  // ロングノーツ色（ミントグリーン）
+function getNormalNote(lanes, isLong=false){
+  const laneArr = Array.isArray(lanes) ? lanes : [lanes];
+  const xs = laneArr.map(l=>LANE_X[l]);
+  const centerX = (Math.min(...xs)+Math.max(...xs))/2;
+  const minW = LANE_SPACING * 3.0 * 0.88;
+  const spanW = Math.max((Math.max(...xs)-Math.min(...xs)) + LANE_SPACING*0.88, minW);
+  const col = isLong ? LONG_COLOR : NOTE_COLOR;
+  const H=.18, D=.5;
+
+  const g = new THREE.Group();
+
+  // 本体（半透明気味）
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(spanW, H, D),
+    new THREE.MeshStandardMaterial({
+      color:col, emissive:col, emissiveIntensity:.7,
+      roughness:.2, metalness:.6, transparent:true, opacity:.82
+    })
+  );
+  g.add(body);
+
+  // 縁取り: EdgesGeometry で枠線
+  const edges = new THREE.LineSegments(
+    new THREE.EdgesGeometry(new THREE.BoxGeometry(spanW, H, D)),
+    new THREE.LineBasicMaterial({color:0xffffff, transparent:true, opacity:.9})
+  );
+  g.add(edges);
+
+  // 上面に薄い光るライン（細い板）
+  const topBar = new THREE.Mesh(
+    new THREE.BoxGeometry(spanW*.96, .03, D*.92),
+    new THREE.MeshBasicMaterial({color:0xffffff, transparent:true, opacity:.55})
+  );
+  topBar.position.y = H/2 + .015;
+  g.add(topBar);
+
+  g.position.set(centerX, .16, NOTE_Z_SPAWN);
+  scene.add(g);
+  // mesh互換: position参照用に group.position をそのまま使う
+  g._isMergedNote = true;
+  return g;
+}
+function releaseNormal(m){ scene.remove(m); m.visible=false; notePool.push(m); }
+
+// ═══════════════════════════════════════
+//  LONG NOTE FACTORY
+//  Structure: Three.Group
+//    _head  : BoxMesh (front cap)
+//    _body  : BoxMesh (stretchy middle bar)
+//    _tail  : BoxMesh (back cap)
+//  All z-positions are LOCAL to the group.
+//  Group.position.z = head world-z
+// ═══════════════════════════════════════
+function makeLongNote(lanes, lenUnits){
+  const laneArr = Array.isArray(lanes) ? lanes : [lanes];
+  const xs = laneArr.map(l=>LANE_X[l]);
+  const centerX = (Math.min(...xs)+Math.max(...xs))/2;
+  const minWL = LANE_SPACING * 3.0 * 0.88;
+  const W = Math.max((Math.max(...xs)-Math.min(...xs)) + LANE_SPACING*0.88, minWL);
+  const col = LONG_COLOR;
+  const g = new THREE.Group();
+
+  const headMesh = new THREE.Mesh(
+    new THREE.BoxGeometry(W,.2,.52),
+    new THREE.MeshStandardMaterial({color:col,emissive:col,emissiveIntensity:.8,
+      roughness:.15,metalness:.55,transparent:true,opacity:.85})
+  );
+  headMesh.position.z=0; g.add(headMesh);
+  // 縁取り
+  const headEdges = new THREE.LineSegments(
+    new THREE.EdgesGeometry(new THREE.BoxGeometry(W,.2,.52)),
+    new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:.9})
+  );
+  headEdges.position.z=0; g.add(headEdges);
+  // 上面ライン
+  const headTop = new THREE.Mesh(
+    new THREE.BoxGeometry(W*.96,.03,.48),
+    new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.5})
+  );
+  headTop.position.set(0,.115,0); g.add(headTop);
+
+  const bodyMat = new THREE.MeshStandardMaterial({
+    color:col,emissive:col,emissiveIntensity:.5,
+    roughness:.35,metalness:.4,transparent:true,opacity:.7
+  });
+  const bodyMesh = new THREE.Mesh(new THREE.BoxGeometry(W*.7,.12,lenUnits), bodyMat);
+  bodyMesh.position.z=-lenUnits/2; g.add(bodyMesh);
+
+  const tailMesh = new THREE.Mesh(
+    new THREE.BoxGeometry(W,.16,.35),
+    new THREE.MeshStandardMaterial({color:col,emissive:col,emissiveIntensity:.75,roughness:.2,metalness:.5})
+  );
+  tailMesh.position.z=-lenUnits; g.add(tailMesh);
+
+  g.position.set(centerX, .16, NOTE_Z_SPAWN);
+  scene.add(g);
+  return { group:g, headMesh, bodyMesh, bodyMat, tailMesh, lenUnits, centerX };
+}
+function releaseLong(parts){
+  scene.remove(parts.group);
+  parts.group.children.forEach(c=>{ if(c.geometry) c.geometry.dispose(); if(c.material) c.material.dispose(); });
+}
+
+// ═══════════════════════════════════════
+//  PARTICLES & ASCEND EFFECT
+// ═══════════════════════════════════════
+const particles=[];
+function spawnParticles(x,color,count=18){
+  for(let i=0;i<count;i++){
+    const a=Math.random()*Math.PI*2, sp=.045+Math.random()*.085;
+    const mat=new THREE.MeshBasicMaterial({color,transparent:true,opacity:1});
+    const p=new THREE.Mesh(new THREE.SphereGeometry(.03+Math.random()*.06,5,5),mat);
+    p.position.set(x,.18,NOTE_Z_HIT);
+    p._vx=Math.cos(a)*sp; p._vy=.05+Math.random()*.08;
+    p._vz=(Math.random()-.5)*.05; p._life=1;
+    scene.add(p); particles.push(p);
+  }
+}
+
+// ブロックが昇天するエフェクト
+// srcMesh: 消えるノーツのGroup/Mesh（位置を引き継ぐ）
+// W/H/D: ノーツのサイズ、col: 色
+const ascendList=[];
+function spawnAscend(srcMesh, spanW, col){
+  const g=new THREE.Group();
+  g.position.copy(srcMesh.position);
+
+  // ノーツ本体のコピー（薄く）
+  const body=new THREE.Mesh(
+    new THREE.BoxGeometry(spanW, .18, .5),
+    new THREE.MeshStandardMaterial({
+      color:col, emissive:col, emissiveIntensity:1.2,
+      transparent:true, opacity:.85, roughness:.1, metalness:.5
+    })
+  );
+  g.add(body);
+
+  // 縁取りコピー
+  const edges=new THREE.LineSegments(
+    new THREE.EdgesGeometry(new THREE.BoxGeometry(spanW,.18,.5)),
+    new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:.9})
+  );
+  g.add(edges);
+
+  // 細い光の帯（上向きに伸びるストリーク）
+  for(let i=0;i<3;i++){
+    const streak=new THREE.Mesh(
+      new THREE.BoxGeometry(.04+Math.random()*.06, .8+Math.random()*.6, .04),
+      new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:.7})
+    );
+    streak.position.set((Math.random()-.5)*spanW*.8, .5+Math.random()*.3, 0);
+    g.add(streak);
+  }
+
+  scene.add(g);
+  ascendList.push({
+    g, body, edges,
+    _vy: 0.04 + Math.random()*0.02,  // 上昇速度
+    _life: 1.0,
+    _decay: 0.045
+  });
+}
+
+function updateAscend(delta){
+  for(let i=ascendList.length-1;i>=0;i--){
+    const a=ascendList[i];
+    a._life -= a._decay;
+    a.g.position.y += a._vy * (1 + (1-a._life)*2); // 加速しながら上昇
+    a.g.position.z -= 0.01; // 少し奥へ流れる
+    // フェードアウト
+    a.g.children.forEach(c=>{
+      if(c.material){
+        c.material.opacity=Math.max(0,a._life*(c.material===a.body?.material?0.85:0.9));
+      }
+    });
+    if(a._life<=0){ scene.remove(a.g); ascendList.splice(i,1); }
+  }
+}
+
+// ═══════════════════════════════════════
+//  GAME STATE
+// ═══════════════════════════════════════
+let gameActive=false, songStart=0, autoPlay=false;
+let score=0,combo=0,maxCombo=0,totalNotes=0,hitNotes=0;
+let beatmap=[],beatmapIdx=0,judgeTimer=null;
+const pressedLanes=new Array(NUM_LANES).fill(false);
+const activeNotes=[];   // {type:'normal'|'long', lane, mesh|parts, state, ...}
+
+function generateBeatmap(){
+  // 音声解析による自動生成譜面（BPM: 136.0）
+  const raw = [
+  {t:6397,lanes:[0,1,2],isLong:false,holdMs:0},
+  {t:6397,lanes:[6,7,8],isLong:false,holdMs:0},
+  {t:6617,lanes:[4,5,6],isLong:false,holdMs:0},
+  {t:6838,lanes:[3,4,5],isLong:true,holdMs:882},
+  {t:7058,lanes:[8,9,10],isLong:false,holdMs:0},
+  {t:7279,lanes:[0,1,2],isLong:false,holdMs:0},
+  {t:7279,lanes:[6,7,8],isLong:false,holdMs:0},
+  {t:7500,lanes:[0,1,2],isLong:false,holdMs:0},
+  {t:7500,lanes:[6,7,8],isLong:false,holdMs:0},
+  {t:7941,lanes:[7,8,9],isLong:true,holdMs:882},
+  {t:8161,lanes:[4,5,6],isLong:false,holdMs:0},
+  {t:8382,lanes:[2,3,4],isLong:false,holdMs:0},
+  {t:8602,lanes:[4,5,6],isLong:false,holdMs:0},
+  {t:8823,lanes:[3,4,5],isLong:true,holdMs:441},
+  {t:9044,lanes:[0,1,2],isLong:true,holdMs:882},
+  {t:9264,lanes:[8,9,10,11],isLong:false,holdMs:0},
+  {t:9485,lanes:[6,7,8],isLong:true,holdMs:441},
+  {t:9705,lanes:[9,10,11],isLong:false,holdMs:0},
+  {t:11470,lanes:[7,8,9],isLong:false,holdMs:0},
+  {t:11691,lanes:[4,5,6,7],isLong:false,holdMs:0},
+  {t:12573,lanes:[2,3,4],isLong:false,holdMs:0},
+  {t:13235,lanes:[0,1,2],isLong:true,holdMs:882},
+  {t:14117,lanes:[4,5,6],isLong:false,holdMs:0},
+  {t:14558,lanes:[1,2,3],isLong:false,holdMs:0},
+  {t:14558,lanes:[8,9,10],isLong:false,holdMs:0},
+  {t:14779,lanes:[7,8,9],isLong:false,holdMs:0},
+  {t:15441,lanes:[7,8,9],isLong:false,holdMs:0},
+  {t:15661,lanes:[1,2,3],isLong:false,holdMs:0},
+  {t:15661,lanes:[8,9,10],isLong:false,holdMs:0},
+  {t:16544,lanes:[9,10,11],isLong:true,holdMs:441},
+  {t:16764,lanes:[3,4,5],isLong:true,holdMs:882},
+  {t:16985,lanes:[0,1,2],isLong:false,holdMs:0},
+  {t:16985,lanes:[6,7,8],isLong:false,holdMs:0},
+  {t:17205,lanes:[8,9,10,11],isLong:false,holdMs:0},
+  {t:17426,lanes:[9,10,11],isLong:false,holdMs:0},
+  {t:17867,lanes:[3,4,5],isLong:false,holdMs:0},
+  {t:17867,lanes:[7,8,9],isLong:false,holdMs:0},
+  {t:20073,lanes:[3,4,5],isLong:false,holdMs:0},
+  {t:20073,lanes:[7,8,9],isLong:false,holdMs:0},
+  {t:20735,lanes:[4,5,6,7],isLong:false,holdMs:0},
+  {t:20955,lanes:[7,8,9],isLong:false,holdMs:0},
+  {t:22500,lanes:[8,9,10],isLong:false,holdMs:0},
+  {t:23382,lanes:[8,9,10],isLong:false,holdMs:0},
+  {t:24044,lanes:[2,3,4],isLong:false,holdMs:0},
+  {t:25588,lanes:[8,9,10],isLong:false,holdMs:0},
+  {t:26250,lanes:[0,1,2],isLong:false,holdMs:0},
+  {t:26250,lanes:[9,10,11],isLong:false,holdMs:0},
+  {t:26470,lanes:[4,5,6,7],isLong:false,holdMs:0},
+  {t:27352,lanes:[2,3,4],isLong:true,holdMs:882},
+  {t:28014,lanes:[8,9,10],isLong:false,holdMs:0},
+  {t:28897,lanes:[8,9,10],isLong:false,holdMs:0},
+  {t:29338,lanes:[9,10,11],isLong:true,holdMs:441},
+  {t:29558,lanes:[2,3,4],isLong:true,holdMs:441},
+  {t:30441,lanes:[3,4,5,6,7,8],isLong:false,holdMs:0},
+  {t:30661,lanes:[3,4,5,6,7,8],isLong:false,holdMs:0},
+  {t:31764,lanes:[6,7,8],isLong:false,holdMs:0},
+  {t:31985,lanes:[0,1,2],isLong:false,holdMs:0},
+  {t:31985,lanes:[9,10,11],isLong:false,holdMs:0},
+  {t:32205,lanes:[4,5,6,7],isLong:false,holdMs:0},
+  {t:32426,lanes:[3,4,5,6,7,8],isLong:false,holdMs:0},
+  {t:33088,lanes:[4,5,6],isLong:false,holdMs:0},
+  {t:33529,lanes:[0,1,2],isLong:false,holdMs:0},
+  {t:34191,lanes:[3,4,5,6,7,8],isLong:false,holdMs:0},
+  {t:35294,lanes:[7,8,9],isLong:false,holdMs:0},
+  {t:36617,lanes:[6,7,8],isLong:false,holdMs:0},
+  {t:37720,lanes:[5,6,7],isLong:false,holdMs:0},
+  {t:37941,lanes:[8,9,10,11],isLong:false,holdMs:0},
+  {t:38161,lanes:[3,4,5],isLong:false,holdMs:0},
+  {t:38161,lanes:[7,8,9],isLong:false,holdMs:0},
+  {t:39705,lanes:[4,5,6,7],isLong:false,holdMs:0},
+  {t:39926,lanes:[8,9,10,11],isLong:false,holdMs:0},
+  {t:40367,lanes:[4,5,6,7],isLong:false,holdMs:0},
+  {t:41470,lanes:[0,1,2],isLong:false,holdMs:0},
+  {t:41470,lanes:[6,7,8],isLong:false,holdMs:0},
+  {t:43014,lanes:[4,5,6,7],isLong:false,holdMs:0},
+  {t:43897,lanes:[7,8,9],isLong:false,holdMs:0},
+  {t:44558,lanes:[6,7,8],isLong:false,holdMs:0},
+  {t:45220,lanes:[7,8,9],isLong:false,holdMs:0},
+  {t:45441,lanes:[5,6,7],isLong:false,holdMs:0},
+  {t:46102,lanes:[3,4,5],isLong:false,holdMs:0},
+  {t:46102,lanes:[7,8,9],isLong:false,holdMs:0},
+  {t:46323,lanes:[1,2,3],isLong:false,holdMs:0},
+  {t:46323,lanes:[8,9,10],isLong:false,holdMs:0},
+  {t:46544,lanes:[0,1,2],isLong:false,holdMs:0},
+  {t:46544,lanes:[9,10,11],isLong:false,holdMs:0},
+  {t:47205,lanes:[3,4,5],isLong:false,holdMs:0},
+  {t:47205,lanes:[7,8,9],isLong:false,holdMs:0},
+  {t:47647,lanes:[8,9,10,11],isLong:false,holdMs:0},
+  {t:48088,lanes:[3,4,5],isLong:false,holdMs:0},
+  {t:48088,lanes:[7,8,9],isLong:false,holdMs:0},
+  {t:48750,lanes:[8,9,10,11],isLong:false,holdMs:0},
+  {t:49191,lanes:[3,4,5],isLong:false,holdMs:0},
+  {t:49191,lanes:[7,8,9],isLong:false,holdMs:0},
+  {t:49632,lanes:[9,10,11],isLong:true,holdMs:882},
+  {t:50294,lanes:[3,4,5,6,7,8],isLong:false,holdMs:0},
+  {t:50735,lanes:[1,2,3],isLong:false,holdMs:0},
+  {t:50735,lanes:[8,9,10],isLong:false,holdMs:0},
+  {t:50955,lanes:[0,1,2],isLong:false,holdMs:0},
+  {t:50955,lanes:[6,7,8],isLong:false,holdMs:0},
+  {t:51397,lanes:[1,2,3],isLong:false,holdMs:0},
+  {t:51397,lanes:[8,9,10],isLong:false,holdMs:0},
+  {t:51617,lanes:[4,5,6],isLong:false,holdMs:0},
+  {t:51838,lanes:[2,3,4],isLong:false,holdMs:0},
+  {t:52058,lanes:[4,5,6],isLong:true,holdMs:441},
+  {t:52279,lanes:[8,9,10,11],isLong:false,holdMs:0},
+  {t:53382,lanes:[4,5,6],isLong:false,holdMs:0},
+  {t:54485,lanes:[0,1,2],isLong:false,holdMs:0},
+  {t:54485,lanes:[6,7,8],isLong:false,holdMs:0},
+  {t:55588,lanes:[0,1,2],isLong:false,holdMs:0},
+  {t:55588,lanes:[9,10,11],isLong:false,holdMs:0},
+  {t:55808,lanes:[0,1,2],isLong:false,holdMs:0},
+  {t:55808,lanes:[9,10,11],isLong:false,holdMs:0},
+  {t:57132,lanes:[6,7,8],isLong:true,holdMs:882},
+  {t:57352,lanes:[2,3,4],isLong:false,holdMs:0},
+  {t:57573,lanes:[0,1,2],isLong:false,holdMs:0},
+  {t:57794,lanes:[0,1,2],isLong:false,holdMs:0},
+  {t:57794,lanes:[9,10,11],isLong:false,holdMs:0},
+  {t:58455,lanes:[9,10,11],isLong:true,holdMs:441},
+  {t:58676,lanes:[6,7,8],isLong:false,holdMs:0},
+  {t:60000,lanes:[0,1,2],isLong:false,holdMs:0},
+  {t:60220,lanes:[4,5,6],isLong:true,holdMs:882},
+  {t:60441,lanes:[1,2,3],isLong:false,holdMs:0},
+  {t:60441,lanes:[8,9,10],isLong:false,holdMs:0},
+  {t:61764,lanes:[0,1,2,3],isLong:false,holdMs:0},
+  {t:62205,lanes:[8,9,10],isLong:false,holdMs:0},
+  {t:62426,lanes:[4,5,6,7],isLong:false,holdMs:0},
+  {t:62647,lanes:[4,5,6,7],isLong:false,holdMs:0},
+  {t:62867,lanes:[4,5,6],isLong:true,holdMs:882},
+  {t:63308,lanes:[1,2,3],isLong:false,holdMs:0},
+  {t:63308,lanes:[8,9,10],isLong:false,holdMs:0},
+  {t:63970,lanes:[3,4,5],isLong:false,holdMs:0},
+  {t:64191,lanes:[7,8,9],isLong:false,holdMs:0},
+  {t:64852,lanes:[3,4,5],isLong:false,holdMs:0},
+  {t:65294,lanes:[9,10,11],isLong:true,holdMs:882},
+  {t:65735,lanes:[6,7,8],isLong:false,holdMs:0},
+  {t:66397,lanes:[5,6,7],isLong:false,holdMs:0},
+  {t:66838,lanes:[3,4,5],isLong:false,holdMs:0},
+  {t:66838,lanes:[7,8,9],isLong:false,holdMs:0},
+  {t:67279,lanes:[0,1,2],isLong:false,holdMs:0},
+  {t:67279,lanes:[9,10,11],isLong:false,holdMs:0},
+  {t:67941,lanes:[6,7,8],isLong:false,holdMs:0},
+  {t:68161,lanes:[4,5,6,7],isLong:false,holdMs:0},
+  {t:68602,lanes:[3,4,5],isLong:false,holdMs:0},
+  {t:68602,lanes:[7,8,9],isLong:false,holdMs:0},
+  {t:68823,lanes:[3,4,5],isLong:true,holdMs:882},
+  {t:69485,lanes:[9,10,11],isLong:true,holdMs:441},
+  {t:69705,lanes:[6,7,8],isLong:false,holdMs:0},
+  {t:69926,lanes:[6,7,8],isLong:false,holdMs:0},
+  {t:70147,lanes:[8,9,10,11],isLong:false,holdMs:0},
+  {t:71250,lanes:[0,1,2],isLong:true,holdMs:441},
+  {t:71470,lanes:[5,6,7],isLong:false,holdMs:0},
+  {t:71911,lanes:[4,5,6,7],isLong:false,holdMs:0},
+  {t:72352,lanes:[8,9,10,11],isLong:false,holdMs:0},
+  {t:72573,lanes:[3,4,5],isLong:false,holdMs:0},
+  {t:72794,lanes:[4,5,6,7],isLong:false,holdMs:0},
+  {t:73235,lanes:[6,7,8],isLong:false,holdMs:0},
+  {t:73676,lanes:[6,7,8],isLong:false,holdMs:0},
+  {t:74338,lanes:[3,4,5,6,7,8],isLong:false,holdMs:0},
+  {t:74558,lanes:[0,1,2],isLong:false,holdMs:0},
+  {t:75882,lanes:[2,3,4],isLong:true,holdMs:882},
+  {t:76544,lanes:[8,9,10],isLong:false,holdMs:0},
+  {t:77426,lanes:[2,3,4],isLong:true,holdMs:441},
+  {t:77647,lanes:[6,7,8],isLong:false,holdMs:0},
+  {t:77867,lanes:[7,8,9],isLong:false,holdMs:0},
+  {t:78088,lanes:[5,6,7],isLong:false,holdMs:0},
+  {t:78308,lanes:[0,1,2,3],isLong:false,holdMs:0},
+  {t:78529,lanes:[3,4,5,6,7,8],isLong:false,holdMs:0},
+  {t:78970,lanes:[0,1,2],isLong:false,holdMs:0},
+  {t:78970,lanes:[9,10,11],isLong:false,holdMs:0},
+  {t:79852,lanes:[2,3,4],isLong:false,holdMs:0},
+  {t:80514,lanes:[0,1,2],isLong:false,holdMs:0},
+  {t:80514,lanes:[6,7,8],isLong:false,holdMs:0},
+  {t:80735,lanes:[5,6,7],isLong:false,holdMs:0},
+  {t:81176,lanes:[2,3,4],isLong:false,holdMs:0},
+  {t:82058,lanes:[4,5,6,7],isLong:false,holdMs:0},
+  {t:82500,lanes:[2,3,4],isLong:false,holdMs:0},
+  {t:82720,lanes:[0,1,2],isLong:false,holdMs:0},
+  {t:82720,lanes:[6,7,8],isLong:false,holdMs:0},
+  {t:82941,lanes:[2,3,4],isLong:true,holdMs:441},
+  {t:83161,lanes:[6,7,8],isLong:true,holdMs:441},
+  {t:83823,lanes:[3,4,5],isLong:false,holdMs:0},
+  {t:84044,lanes:[5,6,7],isLong:false,holdMs:0},
+  {t:84264,lanes:[0,1,2],isLong:false,holdMs:0},
+  {t:84485,lanes:[7,8,9],isLong:false,holdMs:0},
+  {t:84926,lanes:[0,1,2],isLong:false,holdMs:0},
+  {t:85147,lanes:[5,6,7],isLong:false,holdMs:0},
+  {t:85808,lanes:[2,3,4],isLong:false,holdMs:0},
+  {t:86029,lanes:[0,1,2],isLong:false,holdMs:0},
+  {t:86029,lanes:[6,7,8],isLong:false,holdMs:0},
+  {t:86250,lanes:[9,10,11],isLong:false,holdMs:0},
+  {t:86691,lanes:[9,10,11],isLong:false,holdMs:0},
+  {t:86911,lanes:[4,5,6,7],isLong:false,holdMs:0},
+  {t:87132,lanes:[2,3,4],isLong:true,holdMs:882},
+  {t:88235,lanes:[4,5,6,7],isLong:false,holdMs:0},
+  {t:88455,lanes:[0,1,2],isLong:false,holdMs:0},
+  {t:90000,lanes:[0,1,2],isLong:true,holdMs:882},
+  {t:90220,lanes:[9,10,11],isLong:true,holdMs:882},
+  {t:90441,lanes:[6,7,8],isLong:true,holdMs:882},
+  {t:90882,lanes:[3,4,5],isLong:false,holdMs:0},
+  {t:91102,lanes:[3,4,5],isLong:true,holdMs:882},
+  {t:91323,lanes:[0,1,2],isLong:false,holdMs:0},
+  {t:91544,lanes:[0,1,2],isLong:false,holdMs:0},
+  {t:92426,lanes:[3,4,5,6,7,8],isLong:false,holdMs:0},
+  {t:92867,lanes:[2,3,4],isLong:false,holdMs:0},
+  {t:93088,lanes:[8,9,10,11],isLong:false,holdMs:0},
+  {t:93308,lanes:[3,4,5],isLong:false,holdMs:0},
+  {t:93750,lanes:[4,5,6],isLong:false,holdMs:0},
+  {t:94411,lanes:[1,2,3],isLong:false,holdMs:0},
+  {t:94411,lanes:[8,9,10],isLong:false,holdMs:0},
+  {t:95073,lanes:[3,4,5],isLong:true,holdMs:441},
+  {t:95294,lanes:[6,7,8],isLong:false,holdMs:0},
+  {t:96176,lanes:[7,8,9],isLong:false,holdMs:0},
+  {t:96617,lanes:[1,2,3],isLong:false,holdMs:0},
+  {t:96617,lanes:[8,9,10],isLong:false,holdMs:0},
+  {t:96838,lanes:[4,5,6,7],isLong:false,holdMs:0},
+  {t:97500,lanes:[0,1,2],isLong:false,holdMs:0},
+  {t:97500,lanes:[6,7,8],isLong:false,holdMs:0},
+  {t:97720,lanes:[3,4,5],isLong:false,holdMs:0},
+  {t:97941,lanes:[2,3,4],isLong:true,holdMs:882},
+  {t:98161,lanes:[7,8,9],isLong:true,holdMs:882},
+  {t:99485,lanes:[6,7,8],isLong:false,holdMs:0},
+  {t:100808,lanes:[6,7,8],isLong:false,holdMs:0},
+  {t:101029,lanes:[3,4,5,6,7,8],isLong:false,holdMs:0},
+  {t:101911,lanes:[1,2,3],isLong:false,holdMs:0},
+  {t:101911,lanes:[8,9,10],isLong:false,holdMs:0},
+  {t:102132,lanes:[7,8,9],isLong:false,holdMs:0},
+  {t:103455,lanes:[1,2,3],isLong:false,holdMs:0},
+  {t:103455,lanes:[8,9,10],isLong:false,holdMs:0},
+  {t:103676,lanes:[4,5,6],isLong:false,holdMs:0},
+  {t:103897,lanes:[3,4,5],isLong:false,holdMs:0},
+  {t:103897,lanes:[7,8,9],isLong:false,holdMs:0}
+  ];
+  const laneEndTime = new Array(12).fill(0);
+  const MIN_GAP = 165;
+  const bm = [];
+  for(const e of raw){
+    const allFree = e.lanes.every(l=>laneEndTime[l]<=e.t);
+    if(!allFree) continue;
+    bm.push(e);
+    e.lanes.forEach(l=>{ laneEndTime[l]=e.t+e.holdMs+MIN_GAP; });
+  }
+  return bm.sort((a,b)=>a.t-b.t);
+}
+
+// ═══════════════════════════════════════
+//  START / END
+// ═══════════════════════════════════════
+// Web Audio
+let audioCtx=null;
+function getAudioCtx(){
+  if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+  return audioCtx;
+}
+// noiseType: 'tap'=空打ち/キー押下音, 'hit'=成功音（高め）
+function playSound(type){
+  try{
+    const ctx=getAudioCtx();
+    const now=ctx.currentTime;
+    if(type==='hit'){
+      // ── 打鍵音: 短いクリック + ピッチ急降下の「コン」 ──
+      // 1) アタック用クリック（極短ノイズ）
+      const clickBuf=ctx.createBuffer(1,Math.floor(ctx.sampleRate*0.008),ctx.sampleRate);
+      const cd=clickBuf.getChannelData(0);
+      for(let i=0;i<cd.length;i++) cd[i]=(Math.random()*2-1)*Math.pow(1-i/cd.length,1.2);
+      const click=ctx.createBufferSource(); click.buffer=clickBuf;
+      const cg=ctx.createGain(); cg.gain.setValueAtTime(0.55,now);
+      click.connect(cg); cg.connect(ctx.destination); click.start(now);
+
+      // 2) ピッチ急降下のトーン（三角波、「コン」感）
+      const osc=ctx.createOscillator();
+      osc.type='triangle';
+      osc.frequency.setValueAtTime(520,now);
+      osc.frequency.exponentialRampToValueAtTime(180,now+0.065);
+      const og=ctx.createGain();
+      og.gain.setValueAtTime(0.22,now);
+      og.gain.exponentialRampToValueAtTime(0.001,now+0.10);
+      osc.connect(og); og.connect(ctx.destination);
+      osc.start(now); osc.stop(now+0.10);
+
+      // 3) ローパスフィルター通したノイズ（ボディ感）
+      const nb=ctx.createBuffer(1,Math.floor(ctx.sampleRate*0.05),ctx.sampleRate);
+      const nd=nb.getChannelData(0);
+      for(let i=0;i<nd.length;i++) nd[i]=(Math.random()*2-1)*Math.pow(1-i/nd.length,2.8)*0.25;
+      const ns=ctx.createBufferSource(); ns.buffer=nb;
+      const nf=ctx.createBiquadFilter(); nf.type='lowpass'; nf.frequency.value=2200;
+      const ng=ctx.createGain(); ng.gain.setValueAtTime(0.4,now); ng.gain.exponentialRampToValueAtTime(0.001,now+0.05);
+      ns.connect(nf); nf.connect(ng); ng.connect(ctx.destination); ns.start(now);
+    } else {
+      // タップ音: ノイズのみ（シャッ）
+      const buf=ctx.createBuffer(1,ctx.sampleRate*0.05,ctx.sampleRate);
+      const d=buf.getChannelData(0);
+      for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,2.5)*0.4;
+      const src=ctx.createBufferSource(); src.buffer=buf;
+      const filter=ctx.createBiquadFilter(); filter.type='highpass'; filter.frequency.value=3500;
+      const gain=ctx.createGain();
+      gain.gain.setValueAtTime(0.9,now);
+      gain.gain.exponentialRampToValueAtTime(0.001,now+0.05);
+      src.connect(filter); filter.connect(gain); gain.connect(ctx.destination);
+      src.start();
+    }
+  }catch(e){}
+}
+function playHitSound(){ playSound('tap'); }
+
+function startGame(auto=false){
+  document.getElementById('overlay').classList.add('hidden');
+  if(videoEl) setupVideoBg(); else setupFallbackBg();
+  getAudioCtx();
+  autoPlay=auto;
+  document.getElementById('judge-line').style.display='block';
+  gameActive=true;
+  score=0;combo=0;maxCombo=0;totalNotes=0;hitNotes=0;
+  beatmap=generateBeatmap(); beatmapIdx=0;
+  songStart=performance.now();
+  updateHUD();
+  setTimeout(endGame,SONG_DURATION);
+}
+function endGame(){
+  gameActive=false;
+  document.getElementById('judge-line').style.display='none';
+  const acc=totalNotes>0?(hitNotes/totalNotes*100).toFixed(1):'0.0';
+  const ov=document.getElementById('overlay');
+  ov.innerHTML=`
+    <h1>RESULT</h1><p>DEMO COMPLETE</p>
+    <div id="result-table">
+      SCORE &nbsp;&nbsp; ${String(score).padStart(6,'0')}<br>
+      MAX COMBO &nbsp;&nbsp; ${maxCombo}<br>
+      ACCURACY &nbsp;&nbsp; ${acc}%<br>
+      NOTES HIT &nbsp;&nbsp; ${hitNotes} / ${totalNotes}
+    </div>
+    <button class="ov-btn" onclick="location.reload()">RETRY</button>
+  `;
+  ov.classList.remove('hidden');
+}
+
+// ═══════════════════════════════════════
+//  HIT LOGIC
+// ═══════════════════════════════════════
+function tryHit(lane){
+  if(!gameActive) return;
+  flashButton(lane);
+
+  // Long note head check first
+  for(const n of activeNotes){
+    const laneArrL=Array.isArray(n.lanes)?n.lanes:[n.lane];
+    if(n.type!=='long'||n.state!=='incoming'||!laneArrL.includes(lane)) continue;
+    const headZ = n.parts.group.position.z;
+    const dist  = Math.abs(headZ - NOTE_Z_HIT);
+    if(dist<=HIT_Z_GOOD){
+      n.state='holding'; n.tickAcc=0;
+      hitNotes++; totalNotes; // already counted at spawn
+      const perf=dist<=HIT_Z_PERF;
+      combo++; if(combo>maxCombo) maxCombo=combo;
+      score+=(perf?300:100)*Math.max(1,Math.floor(combo/4));
+      playSound('hit');
+      showJudge(perf?'PERFECT!':'GOOD', perf?LANE_COLORS_HEX[lane]:0x999999);
+      updateHUD(); flashScore();
+      spawnParticles(LANE_X[lane],LANE_COLORS_HEX[lane],10);
+      return;
+    }
+  }
+
+  // Normal note
+  let best=null, bestDist=Infinity;
+  for(const n of activeNotes){
+    if(n.type!=='normal') continue;
+    const laneArr=Array.isArray(n.lanes)?n.lanes:[n.lane];
+    if(!laneArr.includes(lane)) continue;
+    const d=Math.abs(n.mesh.position.z-NOTE_Z_HIT);
+    if(d<bestDist){bestDist=d;best=n;}
+  }
+  if(!best||bestDist>HIT_Z_GOOD) return;
+  activeNotes.splice(activeNotes.indexOf(best),1);
+  const hitX=best.mesh.position.x;
+  // ノーツ幅を取得（GroupのBodyから）
+  const bstW=best.mesh.children&&best.mesh.children[0]?
+    best.mesh.children[0].geometry.parameters.width : LANE_SPACING*3*0.88;
+  spawnAscend(best.mesh, bstW, NOTE_COLOR);
+  releaseNormal(best.mesh);
+  spawnParticles(hitX, NOTE_COLOR);
+  hitNotes++;
+  const perf=bestDist<=HIT_Z_PERF;
+  combo++; if(combo>maxCombo) maxCombo=combo;
+  score+=(perf?300:100)*Math.max(1,Math.floor(combo/4));
+  playSound('hit');
+  showJudge(perf?'PERFECT!':'GOOD',perf?LANE_COLORS_HEX[lane]:0x999999);
+  updateHUD(); flashScore();
+}
+
+function tryRelease(lane){
+  // ロングノーツは離しても継続 — 何もしない
+}
+
+// ═══════════════════════════════════════
+//  LONG NOTE PER-FRAME UPDATE
+// ═══════════════════════════════════════
+function updateLongNotes(delta){
+  for(let i=activeNotes.length-1;i>=0;i--){
+    const n=activeNotes[i];
+    if(n.type!=='long') continue;
+    const g=n.parts.group;
+
+    // Move
+    g.position.z += NOTE_SPEED*delta;
+    const headZ = g.position.z;
+    const tailZ = headZ - n.parts.lenUnits;
+
+    if(n.state==='incoming'){
+      // 頭がヒットゾーンに入ったらキーを押せばいつでも拾える
+      if(headZ >= NOTE_Z_HIT - HIT_Z_GOOD){
+        if(pressedLanes[n.lanes?.[0]??n.lane] ||
+           (Array.isArray(n.lanes) && n.lanes.some(l=>pressedLanes[l]))){
+          // 途中から押してもholding開始
+          n.state='holding'; n.tickAcc=0;
+          hitNotes++;
+          combo++; if(combo>maxCombo) maxCombo=combo;
+          score+=100*Math.max(1,Math.floor(combo/4));
+          showJudge('GOOD',0x999999);
+          updateHUD(); flashScore();
+        }
+      }
+      // 尻尾も過ぎたら完全MISS
+      const tailZ2 = headZ - n.parts.lenUnits;
+      if(tailZ2 > NOTE_Z_HIT + HIT_Z_GOOD + 1){
+        releaseLong(n.parts); activeNotes.splice(i,1);
+        combo=0; showJudge('MISS',0xff8866); updateHUD();
+      }
+    }
+
+    else if(n.state==='holding'){
+      const btn=hitButtons[n.lane];
+      btn.light.intensity=3.5;
+      glowLines[n.lane].material.opacity=.16;
+
+      // Score tick + combo加算
+      n.tickAcc=(n.tickAcc||0)+delta*1000;
+      if(n.tickAcc>=LONG_TICK_MS){
+        n.tickAcc-=LONG_TICK_MS;
+        combo++; if(combo>maxCombo) maxCombo=combo;
+        score+=10*Math.max(1,Math.floor(combo/4));
+        showJudge('HOLD',LANE_COLORS_HEX[n.lane]);
+        updateHUD(); flashScore();
+        spawnParticles(LANE_X[n.lane],LANE_COLORS_HEX[n.lane],3);
+      }
+
+      // Shrink body as it's consumed past hit line
+      if(headZ > NOTE_Z_HIT){
+        const consumed = headZ - NOTE_Z_HIT;               // units past hit line
+        const remaining = Math.max(0, n.parts.lenUnits - consumed);
+
+        // Scale body along Z and reposition it
+        if(remaining > 0.05){
+          const scaleZ = remaining / n.parts.lenUnits;
+          n.parts.bodyMesh.scale.z = scaleZ;
+          // Body local centre: starts at -lenUnits/2 original
+          // After head passes by `consumed`, body starts at hit line and goes back
+          n.parts.bodyMesh.position.z = -(consumed + remaining/2);
+        }
+
+        // Hide head once it's gone past
+        n.parts.headMesh.visible = headZ < NOTE_Z_HIT + 0.6;
+
+        // Tail reached hit zone → complete
+        if(tailZ >= NOTE_Z_HIT - 0.3){
+          releaseLong(n.parts); activeNotes.splice(i,1);
+          combo++; if(combo>maxCombo) maxCombo=combo;
+          score+=300*Math.max(1,Math.floor(combo/4));
+          hitNotes++;
+          playSound('hit');
+          showJudge('PERFECT!',LANE_COLORS_HEX[n.lane]);
+          updateHUD(); flashScore();
+          spawnParticles(LANE_X[n.lane],LANE_COLORS_HEX[n.lane],24);
+          btn.mat.emissiveIntensity=.25; btn.light.intensity=0;
+          glowLines[n.lane].material.opacity=.055;
+          continue;
+        }
+      }
+
+      // (離しても継続するので、キー状態チェックなし)
+    }
+
+    else { // 'break' or stale
+      releaseLong(n.parts); activeNotes.splice(i,1);
+    }
+  }
+}
+
+// ═══════════════════════════════════════
+//  HELPERS
+// ═══════════════════════════════════════
+function flashButton(i){
+  playHitSound();
+  const b=hitButtons[i];
+  b.light.intensity=5;
+  glowLines[i].material.opacity=.22;
+  // klabelはキー単位（6個）なのでレーン→キー変換
+  const keyIdx=Math.floor(i/2);
+  const kl=document.getElementById('kl'+keyIdx);
+  if(kl) kl.classList.add('active');
+  setTimeout(()=>{
+    b.light.intensity=0;
+    glowLines[i].material.opacity=.055;
+    if(kl) kl.classList.remove('active');
+  },110);
+}
+function showJudge(text,color){
+  const el=document.getElementById('judgment');
+  el.textContent=text;
+  const hex='#'+new THREE.Color(color).getHexString();
+  el.style.color=hex; el.style.textShadow=`0 0 18px ${hex}`;
+  el.style.opacity=1;
+  if(judgeTimer) clearTimeout(judgeTimer);
+  judgeTimer=setTimeout(()=>el.style.opacity=0, text==='HOLD'?80:360);
+}
+function updateHUD(){
+  document.getElementById('score').textContent=String(score).padStart(6,'0');
+  const cw=document.getElementById('combo-wrap');
+  cw.style.display=combo>0?'block':'none';
+  document.getElementById('combo').textContent=combo;
+  const a=totalNotes>0?(hitNotes/totalNotes*100).toFixed(1):'—';
+  document.getElementById('acc').textContent='ACC '+a+'%';
+}
+function flashScore(){
+  const el=document.getElementById('score');
+  el.style.transform='scale(1.12)';
+  setTimeout(()=>el.style.transform='',80);
+}
+
+// ═══════════════════════════════════════
+//  INPUT
+// ═══════════════════════════════════════
+document.addEventListener('keydown',e=>{
+  const lanes=KEYS_MAP[e.key.toLowerCase()];
+  if(!lanes||e.repeat) return;
+  // キーインデックス（0〜5）を特定してklabelを光らせる
+  const keyIdx=Object.keys(KEYS_MAP).indexOf(e.key.toLowerCase());
+  if(keyIdx>=0){ const kl=document.getElementById('kl'+keyIdx); if(kl) kl.classList.add('active'); }
+  lanes.forEach(lane=>{ pressedLanes[lane]=true; });
+  // 2レーン分のtryHitを試みる（最初に当たった方が判定）
+  lanes.forEach(lane=>tryHit(lane));
+});
+document.addEventListener('keyup',e=>{
+  const lanes=KEYS_MAP[e.key.toLowerCase()];
+  if(!lanes) return;
+  const keyIdx=Object.keys(KEYS_MAP).indexOf(e.key.toLowerCase());
+  if(keyIdx>=0){ const kl=document.getElementById('kl'+keyIdx); if(kl) kl.classList.remove('active'); }
+  lanes.forEach(lane=>{ pressedLanes[lane]=false; tryRelease(lane); });
+});
+
+// ═══════════════════════════════════════
+//  RENDER LOOP
+// ═══════════════════════════════════════
+const clock=new THREE.Clock();
+function animate(){
+  requestAnimationFrame(animate);
+  const delta=clock.getDelta();
+  const elapsed=performance.now()-songStart;
+
+  if(gameActive){
+    document.getElementById('prog').style.width=Math.min(100,elapsed/SONG_DURATION*100)+'%';
+
+    // Spawn（終了3秒前以降はスポーン停止）
+    const travelMs=(NOTE_Z_HIT-NOTE_Z_SPAWN)/NOTE_SPEED*1000;
+    while(beatmapIdx<beatmap.length && elapsed<SONG_DURATION-3000){
+      const e=beatmap[beatmapIdx];
+      if(elapsed>=e.t-travelMs){
+        if(e.isLong){
+          const lenUnits=e.holdMs/1000*NOTE_SPEED;
+          const parts=makeLongNote(e.lanes,lenUnits);
+          activeNotes.push({type:'long',lanes:e.lanes,lane:e.lanes[0],parts,state:'incoming',tickAcc:0});
+          totalNotes++;
+        } else {
+          const mesh=getNormalNote(e.lanes, false);
+          activeNotes.push({type:'normal',lanes:e.lanes,lane:e.lanes[0],mesh});
+          totalNotes++;
+        }
+        beatmapIdx++;
+      } else break;
+    }
+
+    // オートプレイ: ノーツがヒットゾーンに入ったら自動判定
+    if(autoPlay){
+      for(const n of [...activeNotes]){
+        if(n.type==='normal'){
+          const d=Math.abs(n.mesh.position.z - NOTE_Z_HIT);
+          if(d <= HIT_Z_PERF) n.lanes.forEach(l=>tryHit(l));
+        } else if(n.type==='long' && n.state==='incoming'){
+          const d=Math.abs(n.parts.group.position.z - NOTE_Z_HIT);
+          if(d <= HIT_Z_PERF) n.lanes.forEach(l=>tryHit(l));
+        }
+      }
+    }
+
+    // Long note update
+    updateLongNotes(delta);
+    updateAscend(delta);
+
+    // Normal note move + miss
+    for(let i=activeNotes.length-1;i>=0;i--){
+      const n=activeNotes[i];
+      if(n.type!=='normal') continue;
+      n.mesh.position.z+=NOTE_SPEED*delta;
+      if(n.mesh.position.z>NOTE_Z_HIT+HIT_Z_GOOD+1.2){
+        releaseNormal(n.mesh); activeNotes.splice(i,1);
+        combo=0; showJudge('MISS',0xff8866); updateHUD();
+      }
+    }
+
+    camera.position.x=Math.sin(elapsed*.00022)*.14;
+    camera.position.y=5.5+Math.sin(elapsed*.0006)*.04;
+  }
+
+  // Particles
+  for(let i=particles.length-1;i>=0;i--){
+    const p=particles[i];
+    p._life-=delta*2.2; p._vy-=delta*.2;
+    p.position.x+=p._vx; p.position.y+=p._vy; p.position.z+=p._vz;
+    p.material.opacity=Math.max(0,p._life);
+    if(p._life<=0){scene.remove(p);particles.splice(i,1);}
+  }
+
+  // Lane glow pulse
+  const t2=clock.getElapsedTime();
+  glowLines.forEach((g,i)=>{
+    const pulse=((Math.sin(t2*2.2+i*.4)*.5+.5)*.018+.055);
+    if(!pressedLanes[i]) g.material.opacity=Math.max(g.material.opacity*.87,pulse);
+  });
+
+  // 赤ジャッジラインをヒット位置に合わせてCSS更新（毎フレーム）
+
+
+  renderer.render(scene,camera);
+}
+animate();
+</script>
+</body>
+</html>
