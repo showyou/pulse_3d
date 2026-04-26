@@ -102,6 +102,18 @@
   <h1>PULSE 3D</h1>
   <div id="song-info">LOADING...</div>
   <div id="video-section">
+    <div id="video-label">譜面 JSON</div>
+    <button id="fumen-pick">♩ 譜面ファイルを選択</button>
+    <input type="file" id="fumen-input" accept=".json">
+    <div id="fumen-name">— デフォルト譜面を使用 —</div>
+  </div>
+  <div id="video-section">
+    <div id="video-label">BGM (OPTIONAL)</div>
+    <button id="bgm-pick">♪ BGM ファイルを選択</button>
+    <input type="file" id="bgm-input" accept="audio/*">
+    <div id="bgm-name">— no file selected —</div>
+  </div>
+  <div id="video-section">
     <div id="video-label">BACKGROUND VIDEO (OPTIONAL)</div>
     <button id="video-pick">SELECT VIDEO FILE</button>
     <input type="file" id="video-input" accept="video/*">
@@ -141,19 +153,61 @@ document.getElementById('video-pick').addEventListener('click', () =>
   document.getElementById('video-input').click()
 );
 
-// 楽曲メタデータ + 譜面ロード
+// デフォルト譜面をフェッチ（ファイル未選択時のフォールバック）
 const meta = await fetch('./songs/metadata.json').then(r => r.json());
 const song = meta.find(s => s.mode === 'rhythm') ?? meta[0];
 document.getElementById('song-title').textContent = `PULSE 3D // ${song.title?.toUpperCase() ?? 'RHYTHM'}`;
 document.getElementById('song-info').textContent  = song.title ?? '';
+const defaultChart = await fetch('./' + song.chart).then(r => r.json());
+mode.loadChart(defaultChart);
 
-const chart = await fetch('./' + song.chart).then(r => r.json());
-mode.loadChart(chart);
-document.getElementById('song-info').textContent = song.title ?? '';
+// 譜面ファイル選択
+document.getElementById('fumen-pick').addEventListener('click', () =>
+  document.getElementById('fumen-input').click()
+);
+document.getElementById('fumen-input').addEventListener('change', async function () {
+  const f = this.files[0]; if (!f) return;
+  document.getElementById('fumen-name').textContent = '読み込み中...';
+  try {
+    const chart = JSON.parse(await f.text());
+    mode.loadChart(chart);
+    document.getElementById('fumen-name').textContent = `✓ ${f.name}`;
+    document.getElementById('song-title').textContent = `PULSE 3D // ${(chart.meta?.title ?? f.name).toUpperCase()}`;
+  } catch (e) {
+    document.getElementById('fumen-name').textContent = `⚠ ${e.message}`;
+  }
+});
+
+// BGM ファイル選択
+let bgmBuffer = null, bgmSource = null;
+document.getElementById('bgm-pick').addEventListener('click', () =>
+  document.getElementById('bgm-input').click()
+);
+document.getElementById('bgm-input').addEventListener('change', async function () {
+  const f = this.files[0]; if (!f) return;
+  document.getElementById('bgm-name').textContent = '読み込み中...';
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    bgmBuffer = await ctx.decodeAudioData(await f.arrayBuffer());
+    document.getElementById('bgm-name').textContent = `✓ ${f.name}`;
+  } catch (e) {
+    document.getElementById('bgm-name').textContent = `⚠ ${e.message}`;
+  }
+});
+
+function playBgm() {
+  if (!bgmBuffer) return;
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  bgmSource = ctx.createBufferSource();
+  bgmSource.buffer = bgmBuffer;
+  bgmSource.connect(ctx.destination);
+  bgmSource.start();
+}
 
 function doStart(auto) {
   if (videoEl) { videoEl.style.display = 'block'; videoEl.play().catch(() => {}); }
   else mode.setupFallbackBg();
+  playBgm();
   mode.start(auto);
 }
 
