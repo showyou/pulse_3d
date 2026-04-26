@@ -54,11 +54,11 @@
   #video-section{display:flex;flex-direction:column;align-items:center;gap:8px;}
   #video-label{font-size:8px;letter-spacing:3px;color:rgba(255,255,255,.22);}
   #video-input{display:none;}
-  #video-pick{padding:7px 22px;font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:3px;
+  .pick-btn{padding:7px 22px;font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:3px;
     background:transparent;border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.35);
     cursor:pointer;text-transform:uppercase;transition:all .2s;}
-  #video-pick:hover{border-color:rgba(255,255,255,.38);color:rgba(255,255,255,.65);}
-  #video-name{font-family:'Share Tech Mono',monospace;font-size:9px;color:rgba(0,200,255,.55);letter-spacing:2px;}
+  .pick-btn:hover{border-color:rgba(255,255,255,.38);color:rgba(255,255,255,.65);}
+  .pick-name{font-family:'Share Tech Mono',monospace;font-size:9px;color:rgba(0,200,255,.55);letter-spacing:2px;}
   .key-hint{font-family:'Share Tech Mono',monospace;font-size:9px;color:rgba(255,255,255,.17);letter-spacing:2px;text-align:center;}
   #result-table{font-family:'Share Tech Mono',monospace;font-size:12px;color:rgba(255,255,255,.5);line-height:2.2;letter-spacing:3px;text-align:center;}
   #judge-line{position:fixed;left:0;right:0;z-index:30;height:4px;display:none;top:80%;
@@ -103,21 +103,21 @@
   <div id="song-info">LOADING...</div>
   <div id="video-section">
     <div id="video-label">譜面 JSON</div>
-    <button id="fumen-pick">♩ 譜面ファイルを選択</button>
+    <button id="fumen-pick" class="pick-btn">♩ 譜面ファイルを選択</button>
     <input type="file" id="fumen-input" accept=".json" style="display:none">
-    <div id="fumen-name">— デフォルト譜面を使用 —</div>
+    <div id="fumen-name" class="pick-name">— デフォルト譜面を使用 —</div>
   </div>
   <div id="video-section">
     <div id="video-label">BGM (OPTIONAL)</div>
-    <button id="bgm-pick">♪ BGM ファイルを選択</button>
+    <button id="bgm-pick" class="pick-btn">♪ BGM ファイルを選択</button>
     <input type="file" id="bgm-input" accept="audio/*" style="display:none">
-    <div id="bgm-name">— no file selected —</div>
+    <div id="bgm-name" class="pick-name">— no file selected —</div>
   </div>
   <div id="video-section">
     <div id="video-label">BACKGROUND VIDEO (OPTIONAL)</div>
-    <button id="video-pick">SELECT VIDEO FILE</button>
+    <button id="video-pick" class="pick-btn">SELECT VIDEO FILE</button>
     <input type="file" id="video-input" accept="video/*" style="display:none">
-    <div id="video-name">— no file selected —</div>
+    <div id="video-name" class="pick-name">— no file selected —</div>
   </div>
   <div style="display:flex;gap:16px;">
     <button class="ov-btn" id="btn-start">START</button>
