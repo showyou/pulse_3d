@@ -16,6 +16,7 @@ public class ChartMeta
     public string title;
     public float bpm;
     public int duration;
+    public string audioFile; // StreamingAssets/songs/ 以下のファイル名。例: "demo.ogg"
 }
 
 [Serializable]

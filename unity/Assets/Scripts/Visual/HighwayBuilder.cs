@@ -22,6 +22,7 @@ public class HighwayBuilder : MonoBehaviour
 
     Light[] _hitLights;
     Material[] _laneMats; // レーングロー用、インスタンス保持
+    readonly bool[] _glowActive = new bool[6]; // キー押下中フラグ（Flash後の intensity 復元用）
 
     public void Build()
     {
@@ -131,21 +132,23 @@ public class HighwayBuilder : MonoBehaviour
 
         // ヒットライトも連動
         if (_hitLights != null && (uint)group < (uint)_hitLights.Length)
+        {
+            _glowActive[group] = active;
             _hitLights[group].intensity = active ? 1.5f : 0f;
+        }
     }
 
     public void FlashLight(int group)
     {
         if (_hitLights == null || (uint)group >= (uint)_hitLights.Length) return;
-        StartCoroutine(Flash(_hitLights[group]));
+        StartCoroutine(Flash(group));
     }
 
-    IEnumerator Flash(Light lt)
+    IEnumerator Flash(int group)
     {
-        lt.intensity = 4f;
+        _hitLights[group].intensity = 4f;
         yield return new WaitForSeconds(0.06f);
-        // ホールド中は1.5fに戻す（SetGroupGlowで管理）
-        lt.intensity = 0f;
+        _hitLights[group].intensity = _glowActive[group] ? 1.5f : 0f;
     }
 
     // ---------------------------------------------------------------

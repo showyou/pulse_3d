@@ -1,6 +1,8 @@
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
+using UnityEngine.Networking;
 
 public enum Judgment { Perfect, Good, Miss }
 
@@ -97,6 +99,29 @@ public class RhythmGameManager : MonoBehaviour
 
         _chart.notes.Sort((a, b) => a.t.CompareTo(b.t));
         Debug.Log($"[PULSE] Loaded '{_chart.meta.title}' — {_chart.notes.Count} notes.");
+        StartCoroutine(LoadAudioThenStart());
+    }
+
+    IEnumerator LoadAudioThenStart()
+    {
+        string audioFile = _chart?.meta?.audioFile;
+        if (!string.IsNullOrEmpty(audioFile))
+        {
+            string audioPath = "file://" + Path.Combine(Application.streamingAssetsPath, "songs", audioFile);
+            _statusMsg = "Loading audio...";
+            using var req = UnityWebRequestMultimedia.GetAudioClip(audioPath, AudioType.UNKNOWN);
+            yield return req.SendWebRequest();
+
+            if (req.result == UnityWebRequest.Result.Success)
+            {
+                audioSource.clip = DownloadHandlerAudioClip.GetContent(req);
+                Debug.Log($"[PULSE] Audio loaded: {audioFile}");
+            }
+            else
+            {
+                Debug.LogWarning($"[PULSE] Audio load failed ({audioFile}): {req.error}");
+            }
+        }
         StartGame();
     }
 

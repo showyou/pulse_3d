@@ -11,6 +11,7 @@ public class NoteController : MonoBehaviour
 
     private RhythmGameManager _manager;
     private GameObject _holdBody;
+    private Material _holdBodyMat;
     private float _holdEndTime;
 
     static readonly Color ColorTap  = new Color(1.0f, 0.95f, 0.2f);
@@ -42,9 +43,9 @@ public class NoteController : MonoBehaviour
             float bodyLen = holdSec * GameConstants.NOTE_SPEED;
             _holdBody.transform.position   = new Vector3(x, 0.03f, GameConstants.NOTE_Z_SPAWN - bodyLen * 0.5f);
             _holdBody.transform.localScale = new Vector3(w * 0.65f, 0.07f, bodyLen);
-            var bm = new Material(SafeShader());
-            HighwayBuilder.ApplyColor(bm, ColorBody);
-            _holdBody.GetComponent<Renderer>().sharedMaterial = bm;
+            _holdBodyMat = new Material(SafeShader());
+            HighwayBuilder.ApplyColor(_holdBodyMat, ColorBody);
+            _holdBody.GetComponent<Renderer>().sharedMaterial = _holdBodyMat;
         }
     }
 
@@ -118,6 +119,9 @@ public class NoteController : MonoBehaviour
     void OnDestroy()
     {
         if (_holdBody) Destroy(_holdBody);
+        if (_holdBodyMat != null) Destroy(_holdBodyMat);
+        var r = GetComponent<Renderer>();
+        if (r != null && r.sharedMaterial != null) Destroy(r.sharedMaterial);
     }
 
     static float LaneCenter(int[] lanes)
