@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 using UnityEngine.Networking;
+using UnityEngine.Video;
 
 public enum Judgment { Perfect, Good, Miss }
 
@@ -41,6 +42,8 @@ public class RhythmGameManager : MonoBehaviour
 
     [Header("Autoplay")]
     public bool autoPlay = false;
+
+    VideoPlayer _videoPlayer;
 
     // -- UI state --
     string _judgmentText = "";
@@ -124,6 +127,7 @@ public class RhythmGameManager : MonoBehaviour
                 Debug.LogWarning($"[PULSE] Audio load failed ({audioFile}): {req.error}");
             }
         }
+        SetupBackgroundVideo(_chart?.meta?.videoFile ?? "");
         StartGame();
     }
 
@@ -172,6 +176,38 @@ public class RhythmGameManager : MonoBehaviour
             audioSource.PlayScheduled(_startDspTime);
 
         _isPlaying = true;
+
+        if (_videoPlayer != null)
+            StartCoroutine(PlayVideoWhenReady());
+    }
+
+    void SetupBackgroundVideo(string videoFile)
+    {
+        if (string.IsNullOrEmpty(videoFile)) return;
+
+        if (_videoPlayer != null) Destroy(_videoPlayer.gameObject);
+
+        string path = "file://" + Path.Combine(Application.streamingAssetsPath, "songs", videoFile);
+        var go = new GameObject("BackgroundVideo");
+        _videoPlayer = go.AddComponent<VideoPlayer>();
+        _videoPlayer.renderMode    = VideoRenderMode.CameraFarPlane;
+        _videoPlayer.targetCamera  = Camera.main;
+        _videoPlayer.audioOutputMode = VideoAudioOutputMode.None;
+        _videoPlayer.isLooping     = true;
+        _videoPlayer.playOnAwake   = false;
+        _videoPlayer.url           = path;
+        _videoPlayer.Prepare();
+        Debug.Log($"[PULSE] Preparing video: {videoFile}");
+    }
+
+    IEnumerator PlayVideoWhenReady()
+    {
+        yield return new WaitUntil(() => _videoPlayer.isPrepared);
+        // 音楽スタート時刻に合わせてオフセット補正
+        double lag = AudioSettings.dspTime - _startDspTime;
+        if (lag > 0) _videoPlayer.time = lag;
+        _videoPlayer.Play();
+        Debug.Log($"[PULSE] Video started (offset {lag:F3}s)");
     }
 
     // ---------------------------------------------------------------

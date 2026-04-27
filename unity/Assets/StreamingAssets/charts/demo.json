@@ -5,7 +5,8 @@
     "title": "Demo",
     "bpm": 120.0,
     "duration": 10000,
-    "audioFile": ""
+    "audioFile": "",
+    "videoFile": ""
   },
   "notes": [
     { "t": 1000,  "lanes": [0, 1],   "isLong": false, "holdMs": 0 },
