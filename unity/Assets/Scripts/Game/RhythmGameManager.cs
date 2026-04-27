@@ -39,6 +39,9 @@ public class RhythmGameManager : MonoBehaviour
     InputHandler _input;
     HighwayBuilder _highway;
 
+    [Header("Autoplay")]
+    public bool autoPlay = false;
+
     // -- UI state --
     string _judgmentText = "";
     float _judgmentTimer;
@@ -73,7 +76,6 @@ public class RhythmGameManager : MonoBehaviour
         string path = Path.Combine(Application.streamingAssetsPath, "charts", chartId + ".json");
         Debug.Log($"[PULSE] Loading chart: {path}");
 
-        // Inspector に古い値が残っている場合は demo にフォールバック
         if (!File.Exists(path) && chartId != "demo")
         {
             Debug.LogWarning($"[PULSE] '{chartId}' not found — falling back to 'demo'");
@@ -88,7 +90,7 @@ public class RhythmGameManager : MonoBehaviour
             return;
         }
 
-        _chart = JsonUtility.FromJson<ChartData>(File.ReadAllText(path));
+        _chart = ParseChart(File.ReadAllText(path));
 
         if (_chart == null || _chart.notes == null || _chart.notes.Count == 0)
         {
@@ -125,6 +127,39 @@ public class RhythmGameManager : MonoBehaviour
         StartGame();
     }
 
+    // Unity chart format か HTML fumen.json かを自動判別してパース
+    ChartData ParseChart(string json)
+    {
+        var data = JsonUtility.FromJson<ChartData>(json);
+        if (data?.meta != null && data.notes?.Count > 0)
+            return data;
+
+        // HTML fumen.json フォーマット
+        var fumen = JsonUtility.FromJson<FumenRoot>(json);
+        if (fumen?.notes == null || fumen.notes.Count == 0) return null;
+
+        var chart = new ChartData();
+        chart.meta = new ChartMeta {
+            title     = fumen.title ?? chartId,
+            duration  = (int)(fumen.totalDuration * 1000),
+            audioFile = fumen.audioFile ?? "",
+        };
+        chart.notes = new List<ChartNote>(fumen.notes.Count);
+        foreach (var n in fumen.notes)
+        {
+            bool isLong    = n.duration > 0.05f;
+            int mappedLane = n.lane % GameConstants.NUM_LANES;
+            chart.notes.Add(new ChartNote {
+                t      = (int)(n.time * 1000),
+                lanes  = new[] { mappedLane },
+                isLong = isLong,
+                holdMs = isLong ? (int)(n.duration * 1000) : 0,
+            });
+        }
+        Debug.Log($"[PULSE] Converted fumen.json '{fumen.title}' ({fumen.notes.Count} notes)");
+        return chart;
+    }
+
     void StartGame()
     {
         _statusMsg = "";
@@ -147,10 +182,35 @@ public class RhythmGameManager : MonoBehaviour
         MusicTime = (float)(AudioSettings.dspTime - _startDspTime);
 
         SpawnDueNotes();
+        if (autoPlay) AutoPlayUpdate();
         CheckHeldKeysForLongNotes(); // キー押しっぱなしでロングノーツを自動キャッチ
         UpdateHoldTicks();           // ホールド中の100msティックスコア
         UpdateJudgmentDisplay();
         UpdateCameraBob();
+    }
+
+    void AutoPlayUpdate()
+    {
+        for (int g = 0; g < 6; g++)
+        {
+            if (_holdNote[g] != null)
+            {
+                if (MusicTime >= _holdNote[g].HitTimeSeconds + _holdNote[g].HoldDuration)
+                    OnGroupReleased(g);
+            }
+            else
+            {
+                int laneA = GameConstants.KEY_LANES[g, 0];
+                int laneB = GameConstants.KEY_LANES[g, 1];
+                NoteController note = FindBestNote(laneA, laneB);
+                if (note == null) continue;
+                if (MusicTime < note.HitTimeSeconds - GameConstants.HIT_WINDOW_PERFECT) continue;
+
+                bool isLong = note.IsLong;
+                OnGroupPressed(g);
+                if (!isLong) OnGroupReleased(g); // タップは即リリース
+            }
+        }
     }
 
     void UpdateCameraBob()
@@ -348,6 +408,12 @@ public class RhythmGameManager : MonoBehaviour
 
         GUI.Label(new Rect(10, 10, 400, 40), $"SCORE  {_score:N0}", style);
         GUI.Label(new Rect(10, 50, 400, 40), $"COMBO  {_combo}", style);
+
+        // オートプレイ トグル
+        var btnStyle = new GUIStyle(GUI.skin.button) { fontSize = 20, fontStyle = FontStyle.Bold };
+        btnStyle.normal.textColor = autoPlay ? Color.cyan : Color.white;
+        if (GUI.Button(new Rect(Screen.width - 190, 10, 180, 38), autoPlay ? "AUTO: ON" : "AUTO: OFF", btnStyle))
+            autoPlay = !autoPlay;
 
         if (_judgmentTimer > 0f)
         {

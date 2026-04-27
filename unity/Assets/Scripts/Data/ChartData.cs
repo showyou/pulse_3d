@@ -45,3 +45,22 @@ public class SongMetadataList
 {
     public SongMetadata[] songs;
 }
+
+// HTML版 extract_notes.py が出力する fumen.json フォーマット
+[Serializable]
+public class FumenNote
+{
+    public float time;      // ヒット時刻（秒）
+    public float duration;  // ノート長（秒）、0 ならタップ
+    public int lane;        // 0-15（C4=0, D#5=15）
+    public float amplitude;
+}
+
+[Serializable]
+public class FumenRoot
+{
+    public string title;
+    public string audioFile;
+    public float totalDuration;
+    public List<FumenNote> notes;
+}
