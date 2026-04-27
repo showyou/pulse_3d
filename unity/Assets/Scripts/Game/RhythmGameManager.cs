@@ -7,49 +7,65 @@ using UnityEngine.Video;
 
 public enum Judgment { Perfect, Good, Miss }
 
+enum GameState { Select, Loading, Playing, Result }
+
 public class RhythmGameManager : MonoBehaviour
 {
     [Header("Audio")]
     public AudioSource audioSource;
 
-    [Header("Chart")]
-    [Tooltip("charts/ 以下のファイル名（拡張子なし）。例: demo, starmine")]
-    public string chartId = "demo";
-
-    // -- runtime state --
-    public float MusicTime { get; private set; }
-
-    int _score;
-    int _combo;
-    int _perfect, _good, _miss;
-
-    bool _isPlaying;
-    double _startDspTime;
-
-    ChartData _chart;
-    int _spawnIndex;
-
-    // active notes on screen, indexed by lane
-    readonly List<NoteController>[] _laneNotes = new List<NoteController>[GameConstants.NUM_LANES];
-
-    // long-note hold state per key group
-    readonly NoteController[] _holdNote    = new NoteController[6];
-    readonly bool[]            _keyHeld    = new bool[6];
-    readonly float[]           _holdTick   = new float[6]; // 100ms tick timer
-
-    InputHandler _input;
-    HighwayBuilder _highway;
-
     [Header("Autoplay")]
     public bool autoPlay = false;
 
-    VideoPlayer _videoPlayer;
+    // ---------------------------------------------------------------
+    // State
+    GameState _state = GameState.Select;
 
-    // -- UI state --
-    string _judgmentText = "";
-    float _judgmentTimer;
-    string _statusMsg = "Loading...";
+    // Song selection
+    SongMetadataList _songList;
+    int              _selectedIndex;
+    SongMetadata     _currentSong;
 
+    // Runtime
+    public float MusicTime { get; private set; }
+
+    int   _score, _combo, _maxCombo;
+    int   _perfect, _good, _miss;
+    bool  _isPlaying;
+    double _startDspTime;
+
+    ChartData _chart;
+    int       _spawnIndex;
+
+    readonly List<NoteController>[] _laneNotes = new List<NoteController>[GameConstants.NUM_LANES];
+    readonly NoteController[]       _holdNote  = new NoteController[6];
+    readonly bool[]                 _keyHeld   = new bool[6];
+    readonly float[]                _holdTick  = new float[6];
+
+    InputHandler   _input;
+    HighwayBuilder _highway;
+    VideoPlayer    _videoPlayer;
+
+    // Note pool (#4)
+    readonly Queue<NoteController> _notePool = new Queue<NoteController>();
+
+    // UI
+    string _judgmentText  = "";
+    float  _judgmentTimer;
+    string _statusMsg     = "";
+
+    // Group colors — mirrors HighwayBuilder.GroupColors
+    static readonly Color[] GroupColors = {
+        new Color(0.0f, 1.0f, 1.0f),
+        new Color(0.2f, 0.4f, 1.0f),
+        new Color(0.6f, 0.2f, 1.0f),
+        new Color(1.0f, 0.3f, 0.6f),
+        new Color(1.0f, 0.55f, 0.1f),
+        new Color(0.2f, 1.0f, 0.4f),
+    };
+    static readonly string[] GroupLabels = { "A", "S", "D", "J", "K", "L" };
+
+    // ---------------------------------------------------------------
     void Awake()
     {
         for (int i = 0; i < GameConstants.NUM_LANES; i++)
@@ -70,81 +86,85 @@ public class RhythmGameManager : MonoBehaviour
         if (audioSource == null)
             audioSource = gameObject.AddComponent<AudioSource>();
 
-        LoadChart();
+        LoadMetadata();
     }
 
     // ---------------------------------------------------------------
-    void LoadChart()
+    // Metadata / Song selection (#10)
+    void LoadMetadata()
     {
-        string path = Path.Combine(Application.streamingAssetsPath, "charts", chartId + ".json");
-        Debug.Log($"[PULSE] Loading chart: {path}");
-
-        if (!File.Exists(path) && chartId != "demo")
-        {
-            Debug.LogWarning($"[PULSE] '{chartId}' not found — falling back to 'demo'");
-            chartId = "demo";
-            path = Path.Combine(Application.streamingAssetsPath, "charts", "demo.json");
-        }
-
-        if (!File.Exists(path))
-        {
-            _statusMsg = $"Chart not found: charts/{chartId}.json";
-            Debug.LogError($"[PULSE] {_statusMsg}");
-            return;
-        }
-
-        _chart = ParseChart(File.ReadAllText(path));
-
-        if (_chart == null || _chart.notes == null || _chart.notes.Count == 0)
-        {
-            _statusMsg = $"Chart parse failed: {chartId}";
-            Debug.LogError($"[PULSE] {_statusMsg}");
-            return;
-        }
-
-        _chart.notes.Sort((a, b) => a.t.CompareTo(b.t));
-        Debug.Log($"[PULSE] Loaded '{_chart.meta.title}' — {_chart.notes.Count} notes.");
-        StartCoroutine(LoadAudioThenStart());
+        string path = Path.Combine(Application.streamingAssetsPath, "songs", "metadata.json");
+        if (File.Exists(path))
+            _songList = JsonUtility.FromJson<SongMetadataList>(File.ReadAllText(path));
+        if (_songList?.songs == null || _songList.songs.Length == 0)
+            _songList = new SongMetadataList { songs = new SongMetadata[0] };
+        _state = GameState.Select;
     }
 
-    IEnumerator LoadAudioThenStart()
+    void StartLoadingSong(SongMetadata song)
     {
-        string audioFile = _chart?.meta?.audioFile;
+        _currentSong = song;
+        _state       = GameState.Loading;
+        _statusMsg   = "Loading...";
+        StartCoroutine(LoadSongCoroutine(song));
+    }
+
+    IEnumerator LoadSongCoroutine(SongMetadata song)
+    {
+        string chartPath = Path.Combine(Application.streamingAssetsPath, song.chart);
+        if (!File.Exists(chartPath))
+        {
+            _statusMsg = $"Chart not found: {song.chart}";
+            _state     = GameState.Select;
+            yield break;
+        }
+
+        _chart = ParseChart(File.ReadAllText(chartPath));
+        if (_chart == null || _chart.notes == null || _chart.notes.Count == 0)
+        {
+            _statusMsg = "Chart parse failed.";
+            _state     = GameState.Select;
+            yield break;
+        }
+        _chart.notes.Sort((a, b) => a.t.CompareTo(b.t));
+
+        // Load audio
+        string audioFile = _chart.meta?.audioFile ?? "";
         if (!string.IsNullOrEmpty(audioFile))
         {
             string audioPath = "file://" + Path.Combine(Application.streamingAssetsPath, "songs", audioFile);
             _statusMsg = "Loading audio...";
             using var req = UnityWebRequestMultimedia.GetAudioClip(audioPath, AudioType.UNKNOWN);
             yield return req.SendWebRequest();
-
             if (req.result == UnityWebRequest.Result.Success)
-            {
                 audioSource.clip = DownloadHandlerAudioClip.GetContent(req);
-                Debug.Log($"[PULSE] Audio loaded: {audioFile}");
-            }
             else
-            {
-                Debug.LogWarning($"[PULSE] Audio load failed ({audioFile}): {req.error}");
-            }
+                Debug.LogWarning($"[PULSE] Audio load failed: {req.error}");
         }
-        SetupBackgroundVideo(_chart?.meta?.videoFile ?? "");
+        else
+        {
+            audioSource.clip = null;
+        }
+
+        SetupBackgroundVideo(_chart.meta?.videoFile ?? "");
+        _statusMsg = "";
         StartGame();
     }
 
-    // Unity chart format か HTML fumen.json かを自動判別してパース
+    // ---------------------------------------------------------------
+    // Chart parsing (#6)
     ChartData ParseChart(string json)
     {
         var data = JsonUtility.FromJson<ChartData>(json);
         if (data?.meta != null && data.notes?.Count > 0)
             return data;
 
-        // HTML fumen.json フォーマット
         var fumen = JsonUtility.FromJson<FumenRoot>(json);
         if (fumen?.notes == null || fumen.notes.Count == 0) return null;
 
-        var chart = new ChartData();
+        var chart  = new ChartData();
         chart.meta = new ChartMeta {
-            title     = fumen.title ?? chartId,
+            title     = fumen.title ?? "",
             duration  = (int)(fumen.totalDuration * 1000),
             audioFile = fumen.audioFile ?? "",
         };
@@ -152,7 +172,7 @@ public class RhythmGameManager : MonoBehaviour
         foreach (var n in fumen.notes)
         {
             bool isLong    = n.duration > 0.05f;
-            int mappedLane = n.lane % GameConstants.NUM_LANES;
+            int  mappedLane = n.lane % GameConstants.NUM_LANES;
             chart.notes.Add(new ChartNote {
                 t      = (int)(n.time * 1000),
                 lanes  = new[] { mappedLane },
@@ -164,67 +184,155 @@ public class RhythmGameManager : MonoBehaviour
         return chart;
     }
 
+    // ---------------------------------------------------------------
+    // Game flow
     void StartGame()
     {
-        _statusMsg = "";
-        _spawnIndex = 0;
-        _score = _combo = _perfect = _good = _miss = 0;
+        // Clear pool leftovers from previous run
+        foreach (var n in _notePool)
+            if (n != null) Destroy(n.gameObject);
+        _notePool.Clear();
 
-        // Sync audio with dspTime for tight timing
-        _startDspTime = AudioSettings.dspTime + 1.0; // 1s lead-in
+        for (int i = 0; i < GameConstants.NUM_LANES; i++) _laneNotes[i].Clear();
+        for (int g = 0; g < 6; g++) { _holdNote[g] = null; _keyHeld[g] = false; _holdTick[g] = 0f; }
+
+        _score = _combo = _maxCombo = _perfect = _good = _miss = 0;
+        _spawnIndex    = 0;
+        _judgmentText  = "";
+        _judgmentTimer = 0f;
+
+        _startDspTime = AudioSettings.dspTime + 1.0;
         if (audioSource.clip != null)
             audioSource.PlayScheduled(_startDspTime);
 
         _isPlaying = true;
+        _state     = GameState.Playing;
 
         if (_videoPlayer != null)
             StartCoroutine(PlayVideoWhenReady());
+
+        Debug.Log($"[PULSE] StartGame: {_chart.meta.title}  notes={_chart.notes.Count}");
     }
 
+    void EndGame()
+    {
+        _isPlaying = false;
+        _state     = GameState.Result;
+        if (_videoPlayer != null) _videoPlayer.Stop();
+    }
+
+    void RetrySong()
+    {
+        if (_currentSong != null)
+            StartLoadingSong(_currentSong);
+    }
+
+    void ReturnToSelect()
+    {
+        if (_videoPlayer != null) { Destroy(_videoPlayer.gameObject); _videoPlayer = null; }
+        audioSource.Stop();
+        audioSource.clip = null;
+        _state = GameState.Select;
+    }
+
+    // ---------------------------------------------------------------
+    // Video (#12)
     void SetupBackgroundVideo(string videoFile)
     {
+        if (_videoPlayer != null) { Destroy(_videoPlayer.gameObject); _videoPlayer = null; }
         if (string.IsNullOrEmpty(videoFile)) return;
-
-        if (_videoPlayer != null) Destroy(_videoPlayer.gameObject);
 
         string path = "file://" + Path.Combine(Application.streamingAssetsPath, "songs", videoFile);
         var go = new GameObject("BackgroundVideo");
         _videoPlayer = go.AddComponent<VideoPlayer>();
-        _videoPlayer.renderMode    = VideoRenderMode.CameraFarPlane;
-        _videoPlayer.targetCamera  = Camera.main;
+        _videoPlayer.renderMode      = VideoRenderMode.CameraFarPlane;
+        _videoPlayer.targetCamera    = Camera.main;
         _videoPlayer.audioOutputMode = VideoAudioOutputMode.None;
-        _videoPlayer.isLooping     = true;
-        _videoPlayer.playOnAwake   = false;
-        _videoPlayer.url           = path;
+        _videoPlayer.isLooping       = true;
+        _videoPlayer.playOnAwake     = false;
+        _videoPlayer.url             = path;
         _videoPlayer.Prepare();
-        Debug.Log($"[PULSE] Preparing video: {videoFile}");
     }
 
     IEnumerator PlayVideoWhenReady()
     {
         yield return new WaitUntil(() => _videoPlayer.isPrepared);
-        // 音楽スタート時刻に合わせてオフセット補正
         double lag = AudioSettings.dspTime - _startDspTime;
         if (lag > 0) _videoPlayer.time = lag;
         _videoPlayer.Play();
-        Debug.Log($"[PULSE] Video started (offset {lag:F3}s)");
     }
 
     // ---------------------------------------------------------------
+    // Update
     void Update()
     {
-        if (!_isPlaying || _chart == null) return;
+        if (_state == GameState.Select)
+        {
+            HandleSelectInput();
+            return;
+        }
+        if (_state == GameState.Result)
+        {
+            if (Input.GetKeyDown(KeyCode.R)) RetrySong();
+            if (Input.GetKeyDown(KeyCode.Escape)) ReturnToSelect();
+            return;
+        }
+        if (_state != GameState.Playing || !_isPlaying || _chart == null) return;
 
         MusicTime = (float)(AudioSettings.dspTime - _startDspTime);
 
         SpawnDueNotes();
         if (autoPlay) AutoPlayUpdate();
-        CheckHeldKeysForLongNotes(); // キー押しっぱなしでロングノーツを自動キャッチ
-        UpdateHoldTicks();           // ホールド中の100msティックスコア
+        CheckHeldKeysForLongNotes();
+        UpdateHoldTicks();
         UpdateJudgmentDisplay();
         UpdateCameraBob();
+
+        // Song end detection (#8)
+        float endTime = _chart.meta.duration > 0
+            ? _chart.meta.duration / 1000f + 1.5f
+            : (_chart.notes.Count > 0 ? _chart.notes[_chart.notes.Count - 1].t / 1000f + 3f : 10f);
+        if (MusicTime >= endTime && _spawnIndex >= _chart.notes.Count)
+            EndGame();
     }
 
+    void HandleSelectInput()
+    {
+        if (_songList == null || _songList.songs.Length == 0) return;
+        if (Input.GetKeyDown(KeyCode.UpArrow))
+            _selectedIndex = Mathf.Max(0, _selectedIndex - 1);
+        if (Input.GetKeyDown(KeyCode.DownArrow))
+            _selectedIndex = Mathf.Min(_songList.songs.Length - 1, _selectedIndex + 1);
+        if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.Space))
+            StartLoadingSong(_songList.songs[_selectedIndex]);
+    }
+
+    // ---------------------------------------------------------------
+    // Note pool (#4)
+    void SpawnNote(ChartNote n)
+    {
+        NoteController ctrl;
+        if (_notePool.Count > 0)
+        {
+            ctrl = _notePool.Dequeue();
+            ctrl.gameObject.SetActive(true);
+        }
+        else
+        {
+            var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            go.name = "Note";
+            Destroy(go.GetComponent<Collider>());
+            ctrl = go.AddComponent<NoteController>();
+        }
+        ctrl.Init(n.t / 1000f, n.lanes, n.isLong, n.holdMs / 1000f, this, ReturnNote);
+        foreach (int lane in n.lanes)
+            _laneNotes[lane].Add(ctrl);
+    }
+
+    void ReturnNote(NoteController n) => _notePool.Enqueue(n);
+
+    // ---------------------------------------------------------------
+    // Autoplay (#9)
     void AutoPlayUpdate()
     {
         for (int g = 0; g < 6; g++)
@@ -236,66 +344,32 @@ public class RhythmGameManager : MonoBehaviour
             }
             else
             {
-                int laneA = GameConstants.KEY_LANES[g, 0];
-                int laneB = GameConstants.KEY_LANES[g, 1];
-                NoteController note = FindBestNote(laneA, laneB);
-                if (note == null) continue;
-                if (MusicTime < note.HitTimeSeconds - GameConstants.HIT_WINDOW_PERFECT) continue;
-
+                var note = FindBestNote(GameConstants.KEY_LANES[g, 0], GameConstants.KEY_LANES[g, 1]);
+                if (note == null || MusicTime < note.HitTimeSeconds - GameConstants.HIT_WINDOW_PERFECT) continue;
                 bool isLong = note.IsLong;
                 OnGroupPressed(g);
-                if (!isLong) OnGroupReleased(g); // タップは即リリース
+                if (!isLong) OnGroupReleased(g);
             }
         }
     }
 
-    void UpdateCameraBob()
-    {
-        Camera cam = Camera.main;
-        if (cam == null) return;
-        float t = Time.time;
-        cam.transform.position = new Vector3(
-            Mathf.Sin(t * 0.7f) * 0.03f,
-            5.5f + Mathf.Sin(t * 1.1f) * 0.02f,
-            9f);
-        cam.transform.LookAt(new Vector3(0f, 0f, -8f));
-    }
-
+    // ---------------------------------------------------------------
     void SpawnDueNotes()
     {
         while (_spawnIndex < _chart.notes.Count)
         {
             var n = _chart.notes[_spawnIndex];
-            float hitSec = n.t / 1000f;
-
-            if (MusicTime < hitSec - GameConstants.TRAVEL_TIME) break;
-
+            if (MusicTime < n.t / 1000f - GameConstants.TRAVEL_TIME) break;
             SpawnNote(n);
             _spawnIndex++;
         }
     }
 
-    void SpawnNote(ChartNote n)
-    {
-        var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        go.name = "Note";
-        Destroy(go.GetComponent<Collider>());
-
-        var ctrl = go.AddComponent<NoteController>();
-        ctrl.Init(n.t / 1000f, n.lanes, n.isLong, n.holdMs / 1000f, this);
-
-        foreach (int lane in n.lanes)
-            _laneNotes[lane].Add(ctrl);
-    }
-
-    // ---------------------------------------------------------------
     void OnGroupPressed(int group)
     {
         _keyHeld[group] = true;
-        _highway.SetGroupGlow(group, true); // レーングロー（ゲーム外でも光る）
-
+        _highway.SetGroupGlow(group, true);
         if (!_isPlaying) return;
-
         TryHit(group);
     }
 
@@ -303,7 +377,6 @@ public class RhythmGameManager : MonoBehaviour
     {
         _keyHeld[group] = false;
         _highway.SetGroupGlow(group, false);
-
         if (_holdNote[group] != null)
         {
             _holdNote[group].OnHoldReleased();
@@ -314,50 +387,38 @@ public class RhythmGameManager : MonoBehaviour
 
     void TryHit(int group)
     {
-        if (_holdNote[group] != null) return; // 既にホールド中
-
-        int laneA = GameConstants.KEY_LANES[group, 0];
-        int laneB = GameConstants.KEY_LANES[group, 1];
-        NoteController best = FindBestNote(laneA, laneB);
+        if (_holdNote[group] != null) return;
+        var best = FindBestNote(GameConstants.KEY_LANES[group, 0], GameConstants.KEY_LANES[group, 1]);
         if (best == null) return;
 
         float err = Mathf.Abs(MusicTime - best.HitTimeSeconds);
-        Judgment j = err <= GameConstants.HIT_WINDOW_PERFECT ? Judgment.Perfect : Judgment.Good;
+        var j = err <= GameConstants.HIT_WINDOW_PERFECT ? Judgment.Perfect : Judgment.Good;
 
         RegisterJudgment(j);
         best.OnHit();
         _highway.FlashLight(group);
         RemoveFromLanes(best);
 
-        if (best.IsLong)
-        {
-            _holdNote[group] = best;
-            _holdTick[group] = 0f;
-        }
+        if (best.IsLong) { _holdNote[group] = best; _holdTick[group] = 0f; }
     }
 
-    // キーを押し続けている間、ウィンドウに入ったロングノーツを自動キャッチ
     void CheckHeldKeysForLongNotes()
     {
         for (int g = 0; g < 6; g++)
         {
             if (!_keyHeld[g] || _holdNote[g] != null) continue;
-            int laneA = GameConstants.KEY_LANES[g, 0];
-            int laneB = GameConstants.KEY_LANES[g, 1];
-            NoteController note = FindBestNote(laneA, laneB);
+            var note = FindBestNote(GameConstants.KEY_LANES[g, 0], GameConstants.KEY_LANES[g, 1]);
             if (note == null || !note.IsLong) continue;
             TryHit(g);
         }
     }
 
-    // ホールド中は100msごとにスコアティック（HTML版準拠）
     void UpdateHoldTicks()
     {
         for (int g = 0; g < 6; g++)
         {
             var note = _holdNote[g];
             if (note == null) { _holdTick[g] = 0f; continue; }
-
             _holdTick[g] += Time.deltaTime;
             if (_holdTick[g] >= 0.1f)
             {
@@ -371,21 +432,16 @@ public class RhythmGameManager : MonoBehaviour
     {
         NoteController best = null;
         float bestErr = float.MaxValue;
-
         foreach (var note in Candidates(laneA, laneB))
         {
             if (note.IsHit || note.IsMissed) continue;
             float err = Mathf.Abs(MusicTime - note.HitTimeSeconds);
             if (err <= GameConstants.HIT_WINDOW_GOOD && err < bestErr)
-            {
-                bestErr = err;
-                best = note;
-            }
+            { bestErr = err; best = note; }
         }
         return best;
     }
 
-    // Deduplicated notes across two lanes
     IEnumerable<NoteController> Candidates(int laneA, int laneB)
     {
         var seen = new HashSet<NoteController>();
@@ -405,101 +461,281 @@ public class RhythmGameManager : MonoBehaviour
             _laneNotes[lane].Remove(note);
     }
 
-    // ---------------------------------------------------------------
     void RegisterJudgment(Judgment j)
     {
-        // HTML版のスコア式: base * (1 + floor(combo/4))
         switch (j)
         {
             case Judgment.Perfect:
-                _perfect++;
-                _combo++;
+                _perfect++; _combo++;
                 _score += 100 * (1 + _combo / 4);
                 break;
             case Judgment.Good:
-                _good++;
-                _combo++;
+                _good++; _combo++;
                 _score += 50 * (1 + _combo / 4);
                 break;
             case Judgment.Miss:
-                _miss++;
-                _combo = 0;
+                _miss++; _combo = 0;
                 break;
         }
-        _judgmentText = j.ToString().ToUpper();
+        if (_combo > _maxCombo) _maxCombo = _combo;
+        _judgmentText  = j.ToString().ToUpper();
         _judgmentTimer = 0.6f;
     }
 
     void UpdateJudgmentDisplay()
     {
-        if (_judgmentTimer > 0f)
-            _judgmentTimer -= Time.deltaTime;
+        if (_judgmentTimer > 0f) _judgmentTimer -= Time.deltaTime;
+    }
+
+    void UpdateCameraBob()
+    {
+        Camera cam = Camera.main;
+        if (cam == null) return;
+        float t = Time.time;
+        cam.transform.position = new Vector3(
+            Mathf.Sin(t * 0.7f) * 0.03f,
+            5.5f + Mathf.Sin(t * 1.1f) * 0.02f, 9f);
+        cam.transform.LookAt(new Vector3(0f, 0f, -8f));
     }
 
     // ---------------------------------------------------------------
+    // GUI (#8, #10, #11)
     void OnGUI()
     {
-        var style = new GUIStyle(GUI.skin.label) { fontSize = 28, fontStyle = FontStyle.Bold };
-        style.normal.textColor = Color.white;
-
-        GUI.Label(new Rect(10, 10, 400, 40), $"SCORE  {_score:N0}", style);
-        GUI.Label(new Rect(10, 50, 400, 40), $"COMBO  {_combo}", style);
-
-        // オートプレイ トグル
-        var btnStyle = new GUIStyle(GUI.skin.button) { fontSize = 20, fontStyle = FontStyle.Bold };
-        btnStyle.normal.textColor = autoPlay ? Color.cyan : Color.white;
-        if (GUI.Button(new Rect(Screen.width - 190, 10, 180, 38), autoPlay ? "AUTO: ON" : "AUTO: OFF", btnStyle))
-            autoPlay = !autoPlay;
-
-        if (_judgmentTimer > 0f)
+        switch (_state)
         {
-            style.fontSize = 42;
-            style.normal.textColor = _judgmentText == "PERFECT" ? Color.yellow
-                                   : _judgmentText == "GOOD"    ? Color.cyan
-                                   : Color.red;
-            GUI.Label(new Rect(Screen.width * 0.5f - 120, Screen.height * 0.5f - 40, 300, 60),
-                      _judgmentText, style);
-        }
-
-        style.fontSize = 18;
-        style.normal.textColor = Color.white;
-        GUI.Label(new Rect(10, Screen.height - 55, 600, 28),
-                  $"PERFECT {_perfect}  GOOD {_good}  MISS {_miss}  [A/S/D/J/K/L]", style);
-
-        // 常時デバッグ行
-        style.fontSize = 15;
-        style.normal.textColor = new Color(1f, 1f, 0.4f);
-        int noteCount = _chart?.notes?.Count ?? 0;
-        GUI.Label(new Rect(10, Screen.height - 28, 700, 24),
-                  $"chart={chartId}  playing={_isPlaying}  notes={noteCount}  time={MusicTime:F2}  spawn={_spawnIndex}", style);
-
-        if (!string.IsNullOrEmpty(_statusMsg))
-        {
-            style.fontSize = 26;
-            style.normal.textColor = Color.red;
-            GUI.Label(new Rect(10, Screen.height * 0.45f, 700, 80), _statusMsg, style);
+            case GameState.Select:  DrawSelectScreen();  break;
+            case GameState.Loading: DrawLoadingScreen(); break;
+            case GameState.Playing: DrawPlayingUI();     break;
+            case GameState.Result:  DrawResultScreen();  break;
         }
     }
 
+    // -- Select screen (#10, #11) --
+    void DrawSelectScreen()
+    {
+        DrawDarkOverlay(0.75f);
+
+        var titleStyle = LabelStyle(52, FontStyle.Bold, new Color(0.35f, 0.75f, 1f));
+        titleStyle.alignment = TextAnchor.MiddleCenter;
+        GUI.Label(new Rect(0, 30, Screen.width, 68), "PULSE 3D", titleStyle);
+
+        if (_songList == null || _songList.songs.Length == 0)
+        {
+            var noSong = LabelStyle(24, FontStyle.Normal, new Color(0.7f, 0.7f, 0.7f));
+            noSong.alignment = TextAnchor.MiddleCenter;
+            GUI.Label(new Rect(0, Screen.height * 0.5f - 20, Screen.width, 40),
+                "No songs found in StreamingAssets/songs/metadata.json", noSong);
+            return;
+        }
+
+        float itemH  = 56f;
+        float listY  = 120f;
+        float listX  = Screen.width * 0.12f;
+
+        for (int i = 0; i < _songList.songs.Length; i++)
+        {
+            var  song     = _songList.songs[i];
+            bool selected = i == _selectedIndex;
+            float y = listY + i * itemH;
+
+            if (selected)
+            {
+                GUI.color = new Color(0.2f, 0.45f, 0.7f, 0.5f);
+                GUI.DrawTexture(new Rect(listX - 10, y + 4, Screen.width * 0.78f, itemH - 8), Texture2D.whiteTexture);
+                GUI.color = Color.white;
+            }
+
+            Color nameCol  = selected ? Color.white : new Color(0.75f, 0.75f, 0.75f);
+            Color infoCol  = selected ? new Color(0.6f, 0.85f, 1f) : new Color(0.4f, 0.55f, 0.7f);
+            string prefix  = selected ? "▶  " : "    ";
+
+            GUI.Label(new Rect(listX, y + 8, Screen.width * 0.5f, itemH),
+                prefix + song.title, LabelStyle(26, FontStyle.Bold, nameCol));
+
+            float durSec = song.duration / 1000f;
+            string info  = $"{song.bpm:0} BPM  {(int)(durSec / 60)}:{(int)(durSec % 60):D2}";
+            GUI.Label(new Rect(Screen.width * 0.65f, y + 12, Screen.width * 0.25f, itemH),
+                info, LabelStyle(20, FontStyle.Normal, infoCol));
+        }
+
+        var hint = LabelStyle(18, FontStyle.Normal, new Color(0.5f, 0.5f, 0.5f));
+        hint.alignment = TextAnchor.MiddleCenter;
+        GUI.Label(new Rect(0, Screen.height - 50, Screen.width, 36),
+            "↑ ↓  Select    ENTER / SPACE  Start", hint);
+
+        if (!string.IsNullOrEmpty(_statusMsg))
+            GUI.Label(new Rect(0, Screen.height - 90, Screen.width, 36),
+                _statusMsg, LabelStyle(20, FontStyle.Normal, Color.red));
+    }
+
+    void DrawLoadingScreen()
+    {
+        DrawDarkOverlay(0.85f);
+        var s = LabelStyle(32, FontStyle.Bold, new Color(0.6f, 0.8f, 1f));
+        s.alignment = TextAnchor.MiddleCenter;
+        GUI.Label(new Rect(0, Screen.height * 0.45f, Screen.width, 50), _statusMsg, s);
+    }
+
+    // -- Playing UI (#11) --
+    void DrawPlayingUI()
+    {
+        DrawProgressBar();
+        DrawScoreCombo();
+        DrawJudgment();
+        DrawKeyIndicators();
+        DrawAutoButton();
+    }
+
+    void DrawProgressBar()
+    {
+        float dur = _chart?.meta?.duration > 0 ? _chart.meta.duration / 1000f : 1f;
+        float p   = Mathf.Clamp01(MusicTime / dur);
+
+        GUI.color = new Color(0.08f, 0.08f, 0.15f, 0.9f);
+        GUI.DrawTexture(new Rect(0, 0, Screen.width, 6), Texture2D.whiteTexture);
+        GUI.color = new Color(0.3f, 0.65f, 1f);
+        GUI.DrawTexture(new Rect(0, 0, Screen.width * p, 6), Texture2D.whiteTexture);
+        GUI.color = Color.white;
+    }
+
+    void DrawScoreCombo()
+    {
+        GUI.Label(new Rect(16, 14, 320, 46), $"{_score:N0}",
+            LabelStyle(34, FontStyle.Bold, Color.white));
+        if (_combo > 1)
+            GUI.Label(new Rect(16, 58, 200, 34), $"x{_combo} COMBO",
+                LabelStyle(22, FontStyle.Bold, new Color(1f, 0.9f, 0.25f)));
+    }
+
+    void DrawJudgment()
+    {
+        if (_judgmentTimer <= 0f) return;
+        float alpha = Mathf.Clamp01(_judgmentTimer / 0.25f);
+        Color c = _judgmentText == "PERFECT" ? new Color(1f, 0.95f, 0.2f, alpha)
+                : _judgmentText == "GOOD"    ? new Color(0.2f, 0.9f, 1f,  alpha)
+                :                              new Color(1f,  0.25f, 0.25f, alpha);
+        var s = LabelStyle(50, FontStyle.Bold, c);
+        s.alignment = TextAnchor.MiddleCenter;
+        GUI.Label(new Rect(0, Screen.height * 0.34f, Screen.width, 64), _judgmentText, s);
+    }
+
+    void DrawKeyIndicators()
+    {
+        const float keyW = 72f, keyH = 48f, gap = 6f;
+        float totalW = 6 * keyW + 5 * gap;
+        float sx = (Screen.width - totalW) * 0.5f;
+        float sy = Screen.height - keyH - 14f;
+
+        for (int g = 0; g < 6; g++)
+        {
+            float x    = sx + g * (keyW + gap);
+            Color c    = GroupColors[g];
+            bool  held = _keyHeld[g];
+
+            GUI.color = held ? c : new Color(c.r * 0.22f, c.g * 0.22f, c.b * 0.22f, 0.85f);
+            GUI.DrawTexture(new Rect(x, sy, keyW, keyH), Texture2D.whiteTexture);
+
+            var ls = LabelStyle(22, FontStyle.Bold,
+                held ? Color.black : new Color(c.r * 0.8f, c.g * 0.8f, c.b * 0.8f));
+            ls.alignment = TextAnchor.MiddleCenter;
+            GUI.color    = Color.white;
+            GUI.Label(new Rect(x, sy, keyW, keyH), GroupLabels[g], ls);
+        }
+        GUI.color = Color.white;
+    }
+
+    void DrawAutoButton()
+    {
+        var s = LabelStyle(20, FontStyle.Bold, autoPlay ? Color.cyan : new Color(0.6f, 0.6f, 0.6f));
+        s.alignment = TextAnchor.MiddleCenter;
+        if (GUI.Button(new Rect(Screen.width - 140, 10, 130, 34), autoPlay ? "AUTO: ON" : "AUTO: OFF"))
+            autoPlay = !autoPlay;
+    }
+
+    // -- Result screen (#8, #11) --
+    void DrawResultScreen()
+    {
+        DrawDarkOverlay(0.88f);
+
+        var titleStyle = LabelStyle(56, FontStyle.Bold, new Color(0.35f, 0.75f, 1f));
+        titleStyle.alignment = TextAnchor.MiddleCenter;
+        GUI.Label(new Rect(0, 30, Screen.width, 72), "RESULT", titleStyle);
+
+        string songTitle = _currentSong?.title ?? _chart?.meta?.title ?? "";
+        var songStyle = LabelStyle(28, FontStyle.Normal, new Color(0.75f, 0.75f, 0.75f));
+        songStyle.alignment = TextAnchor.MiddleCenter;
+        GUI.Label(new Rect(0, 110, Screen.width, 42), songTitle, songStyle);
+
+        // Rank
+        int   total = _perfect + _good + _miss;
+        float acc   = total > 0 ? (_perfect * 100f + _good * 50f) / (total * 100f) : 0f;
+        string rank = acc >= 0.97f ? "S" : acc >= 0.88f ? "A" : acc >= 0.72f ? "B" : "C";
+        Color rankColor = rank == "S" ? new Color(1f, 0.9f, 0.2f)
+                        : rank == "A" ? new Color(0.2f, 1f, 0.5f)
+                        : rank == "B" ? new Color(0.4f, 0.7f, 1f)
+                        :               new Color(0.7f, 0.7f, 0.7f);
+
+        float cx = Screen.width * 0.5f;
+        GUI.Label(new Rect(cx - 260, 170, 360, 60),
+            $"{_score:N0}", LabelStyle(50, FontStyle.Bold, Color.white));
+
+        var rankStyle = LabelStyle(72, FontStyle.Bold, rankColor);
+        rankStyle.alignment = TextAnchor.MiddleCenter;
+        GUI.Label(new Rect(cx + 110, 158, 140, 80), rank, rankStyle);
+
+        // Stats
+        var statStyle = LabelStyle(24, FontStyle.Normal, new Color(0.8f, 0.8f, 0.8f));
+        statStyle.alignment = TextAnchor.MiddleCenter;
+        GUI.Label(new Rect(0, 252, Screen.width, 36),
+            $"PERFECT  {_perfect}    GOOD  {_good}    MISS  {_miss}", statStyle);
+        GUI.Label(new Rect(0, 286, Screen.width, 36),
+            $"MAX COMBO  {_maxCombo}", statStyle);
+
+        // Buttons
+        float btnY = Screen.height * 0.62f;
+        float btnW = 200f, btnH = 52f;
+        if (GUI.Button(new Rect(cx - btnW - 16, btnY, btnW, btnH), "RETRY"))
+            RetrySong();
+        if (GUI.Button(new Rect(cx + 16, btnY, btnW, btnH), "SELECT"))
+            ReturnToSelect();
+
+        var hint = LabelStyle(16, FontStyle.Normal, new Color(0.45f, 0.45f, 0.45f));
+        hint.alignment = TextAnchor.MiddleCenter;
+        GUI.Label(new Rect(0, btnY + btnH + 10, Screen.width, 28),
+            "R: Retry    ESC: Select", hint);
+    }
+
     // ---------------------------------------------------------------
+    // Helpers
+    static void DrawDarkOverlay(float alpha)
+    {
+        GUI.color = new Color(0f, 0f, 0.04f, alpha);
+        GUI.DrawTexture(new Rect(0, 0, Screen.width, Screen.height), Texture2D.whiteTexture);
+        GUI.color = Color.white;
+    }
+
+    static GUIStyle LabelStyle(int size, FontStyle style, Color color)
+    {
+        var s = new GUIStyle(GUI.skin.label) { fontSize = size, fontStyle = style };
+        s.normal.textColor = color;
+        return s;
+    }
+
     static void SetupCamera()
     {
         Camera cam = Camera.main;
         if (cam == null) return;
-
-        // Force perspective — SampleScene defaults to Orthographic in 2D templates
-        cam.orthographic = false;
-        cam.fieldOfView = 65f;
+        cam.orthographic  = false;
+        cam.fieldOfView   = 65f;
         cam.nearClipPlane = 0.3f;
-        cam.farClipPlane = 150f; // highway extends ~104 units from camera
-
+        cam.farClipPlane  = 150f;
         cam.transform.position = new Vector3(0f, 5.5f, 9f);
         cam.transform.LookAt(new Vector3(0f, 0f, -8f));
-
-        RenderSettings.fog = true;
-        RenderSettings.fogMode = FogMode.Exponential;
+        RenderSettings.fog        = true;
+        RenderSettings.fogMode    = FogMode.Exponential;
         RenderSettings.fogDensity = 0.008f;
-        RenderSettings.fogColor = new Color(0.05f, 0.05f, 0.1f);
+        RenderSettings.fogColor   = new Color(0.05f, 0.05f, 0.1f);
         RenderSettings.ambientLight = new Color(0.1f, 0.1f, 0.2f);
     }
 }

@@ -1,12 +1,20 @@
 {
   "songs": [
     {
+      "id": "demo",
+      "title": "Demo",
+      "bpm": 120.0,
+      "duration": 10000,
+      "mode": "rhythm",
+      "chart": "charts/demo.json"
+    },
+    {
       "id": "starmine",
       "title": "Star-mine",
       "bpm": 136.0,
       "duration": 236100,
       "mode": "rhythm",
-      "chart": "charts/starmine.json"
+      "chart": "charts/starmine_fumen.json"
     },
     {
       "id": "deepness",
@@ -14,7 +22,7 @@
       "bpm": 136.0,
       "duration": 108200,
       "mode": "rhythm",
-      "chart": "charts/deepness.json"
+      "chart": "charts/deepness_fumen.json"
     }
   ]
 }
