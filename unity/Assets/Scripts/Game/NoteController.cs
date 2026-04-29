@@ -120,7 +120,7 @@ public class NoteController : MonoBehaviour
             return;
         }
 
-        if (z > GameConstants.NOTE_Z_DEAD) Finish();
+        if (z > GameConstants.NOTE_Z_DEAD) { _manager.OnNoteExpired(this); Finish(); }
     }
 
     public void OnHit()

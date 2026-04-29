@@ -203,12 +203,19 @@ public class RhythmGameManager : MonoBehaviour
     // Game flow
     void StartGame()
     {
+        // Destroy all active notes still in lanes (not yet pooled)
+        var seen = new HashSet<NoteController>();
+        for (int i = 0; i < GameConstants.NUM_LANES; i++)
+        {
+            foreach (var n in _laneNotes[i])
+                if (n != null && seen.Add(n)) Destroy(n.gameObject);
+            _laneNotes[i].Clear();
+        }
+
         // Clear pool leftovers from previous run
         foreach (var n in _notePool)
             if (n != null) Destroy(n.gameObject);
         _notePool.Clear();
-
-        for (int i = 0; i < GameConstants.NUM_LANES; i++) _laneNotes[i].Clear();
         for (int g = 0; g < 6; g++) { _holdNote[g] = null; _keyHeld[g] = false; _holdTick[g] = 0f; }
 
         _score = _combo = _maxCombo = _perfect = _good = _miss = 0;
@@ -476,8 +483,11 @@ public class RhythmGameManager : MonoBehaviour
         RemoveFromLanes(note);
     }
 
+    public void OnNoteExpired(NoteController note) => RemoveFromLanes(note);
+
     void RemoveFromLanes(NoteController note)
     {
+        if (note.Lanes == null) return;
         foreach (int lane in note.Lanes)
             _laneNotes[lane].Remove(note);
     }
