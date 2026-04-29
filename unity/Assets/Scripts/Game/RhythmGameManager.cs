@@ -368,7 +368,18 @@ public class RhythmGameManager : MonoBehaviour
         _videoPlayer.playbackSpeed   = 1.0f;
         // デフォルトのAudioDSPTimeSourceで詰まる事例があるためゲーム時間に固定
         _videoPlayer.timeSource      = VideoTimeSource.GameTimeSource;
-        _videoPlayer.audioOutputMode = videoHasAudio ? VideoAudioOutputMode.Direct : VideoAudioOutputMode.None;
+        // 動画内の音声トラックの扱い:
+        //  - 別ファイルから音声を流す場合(videoHasAudio=false)はトラック自体を無視
+        //  - そうでないと内部デコーダがバッファあふれを起こしてクロックがスタックする
+        if (videoHasAudio)
+        {
+            _videoPlayer.audioOutputMode = VideoAudioOutputMode.Direct;
+        }
+        else
+        {
+            _videoPlayer.controlledAudioTrackCount = 0;
+            _videoPlayer.audioOutputMode = VideoAudioOutputMode.None;
+        }
         _videoPlayer.errorReceived    += (vp, msg) => Debug.LogWarning($"[PULSE] Video error: {msg}");
         _videoPlayer.prepareCompleted += vp => Debug.Log($"[PULSE] Video prepared OK  size={vp.width}x{vp.height}  framerate={vp.frameRate:F2}");
         // フレームデコードが進んでるかを最初の数枚だけ確認
