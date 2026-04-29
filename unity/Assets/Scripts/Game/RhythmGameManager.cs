@@ -62,6 +62,7 @@ public class RhythmGameManager : MonoBehaviour
     string _judgmentText  = "";
     float  _judgmentTimer;
     string _statusMsg     = "";
+    float  _selectScroll  = 0f;
 
     // Group colors — mirrors HighwayBuilder.GroupColors
     static readonly Color[] GroupColors = {
@@ -91,6 +92,7 @@ public class RhythmGameManager : MonoBehaviour
         _input = gameObject.AddComponent<InputHandler>();
         _input.OnKeyPressed  += OnGroupPressed;
         _input.OnKeyReleased += OnGroupReleased;
+        _input.GetGroupRect   = GroupRect;
 
         if (audioSource == null)
             audioSource = gameObject.AddComponent<AudioSource>();
@@ -653,43 +655,68 @@ public class RhythmGameManager : MonoBehaviour
             return;
         }
 
-        float itemH  = 56f;
-        float listY  = 120f;
-        float listX  = Screen.width * 0.12f;
+        // ドラッグスクロール（タッチ/マウス共通）
+        var ev = Event.current;
+        if (ev.type == EventType.ScrollWheel)
+            _selectScroll -= ev.delta.y * 40f;
+        if (ev.type == EventType.MouseDrag)
+            _selectScroll += ev.delta.y;
+
+        float itemH = Mathf.Max(Screen.height * 0.11f, 72f);
+        float listY = 110f + _selectScroll;
+        float listX = Screen.width * 0.05f;
+        float listW = Screen.width * 0.9f;
+
+        // スクロール下限（最後の曲が画面から消えないよう）
+        float maxScroll = 0f;
+        float minScroll = -((_songList.songs.Length - 1) * itemH);
+        _selectScroll = Mathf.Clamp(_selectScroll, minScroll, maxScroll);
 
         for (int i = 0; i < _songList.songs.Length; i++)
         {
-            var  song     = _songList.songs[i];
-            bool selected = i == _selectedIndex;
-            float y = listY + i * itemH;
+            var   song     = _songList.songs[i];
+            bool  selected = i == _selectedIndex;
+            float y        = listY + i * itemH;
+
+            // 画面外はスキップ
+            if (y + itemH < 100f || y > Screen.height - 60f) continue;
+
+            Rect rowRect = new Rect(listX - 10, y + 4, listW, itemH - 8);
 
             if (selected)
             {
                 GUI.color = new Color(0.2f, 0.45f, 0.7f, 0.5f);
-                GUI.DrawTexture(new Rect(listX - 10, y + 4, Screen.width * 0.78f, itemH - 8), Texture2D.whiteTexture);
+                GUI.DrawTexture(rowRect, Texture2D.whiteTexture);
                 GUI.color = Color.white;
             }
 
-            Color nameCol  = selected ? Color.white : new Color(0.75f, 0.75f, 0.75f);
-            Color infoCol  = selected ? new Color(0.6f, 0.85f, 1f) : new Color(0.4f, 0.55f, 0.7f);
-            string prefix  = selected ? "▶  " : "    ";
+            Color nameCol = selected ? Color.white : new Color(0.75f, 0.75f, 0.75f);
+            Color infoCol = selected ? new Color(0.6f, 0.85f, 1f) : new Color(0.4f, 0.55f, 0.7f);
+            string prefix = selected ? "▶  " : "    ";
 
-            GUI.Label(new Rect(listX, y + 8, Screen.width * 0.5f, itemH),
+            GUI.Label(new Rect(listX, y + itemH * 0.1f, Screen.width * 0.55f, itemH * 0.6f),
                 prefix + song.title, LabelStyle(26, FontStyle.Bold, nameCol));
 
             float durSec = song.duration / 1000f;
             string info  = $"{song.bpm:0} BPM  {(int)(durSec / 60)}:{(int)(durSec % 60):D2}";
-            GUI.Label(new Rect(Screen.width * 0.65f, y + 12, Screen.width * 0.25f, itemH),
+            GUI.Label(new Rect(Screen.width * 0.62f, y + itemH * 0.15f, Screen.width * 0.33f, itemH * 0.5f),
                 info, LabelStyle(20, FontStyle.Normal, infoCol));
+
+            // 透明ボタン：タップ1回で選択、選択済みならスタート
+            if (GUI.Button(rowRect, GUIContent.none, GUIStyle.none))
+            {
+                if (_selectedIndex == i) StartLoadingSong(song);
+                else                     _selectedIndex = i;
+            }
         }
 
         var hint = LabelStyle(18, FontStyle.Normal, new Color(0.5f, 0.5f, 0.5f));
         hint.alignment = TextAnchor.MiddleCenter;
         GUI.Label(new Rect(0, Screen.height - 50, Screen.width, 36),
-            "↑ ↓  Select    ENTER / SPACE  Start", hint);
+            "↑ ↓  Select    ENTER / SPACE  Start    Tap to select / double-tap to start", hint);
 
         if (!string.IsNullOrEmpty(_statusMsg))
-            GUI.Label(new Rect(0, Screen.height - 90, Screen.width, 36),
+            GUI.Label(new Rect(0, Screen.height - 86, Screen.width, 36),
                 _statusMsg, LabelStyle(20, FontStyle.Normal, Color.red));
     }
 
@@ -749,27 +776,30 @@ public class RhythmGameManager : MonoBehaviour
         GUI.Label(new Rect(0, Screen.height * 0.34f, Screen.width, 64), _judgmentText, s);
     }
 
+    // タッチゾーンと描画を共有するグループRect
+    Rect GroupRect(int g)
+    {
+        float keyH = Mathf.Max(Screen.height * 0.18f, 64f);
+        float keyW = Screen.width / 6f;
+        return new Rect(g * keyW, Screen.height - keyH, keyW, keyH);
+    }
+
     void DrawKeyIndicators()
     {
-        const float keyW = 72f, keyH = 48f, gap = 6f;
-        float totalW = 6 * keyW + 5 * gap;
-        float sx = (Screen.width - totalW) * 0.5f;
-        float sy = Screen.height - keyH - 14f;
-
         for (int g = 0; g < 6; g++)
         {
-            float x    = sx + g * (keyW + gap);
+            Rect  r    = GroupRect(g);
             Color c    = GroupColors[g];
             bool  held = _keyHeld[g];
 
-            GUI.color = held ? c : new Color(c.r * 0.22f, c.g * 0.22f, c.b * 0.22f, 0.85f);
-            GUI.DrawTexture(new Rect(x, sy, keyW, keyH), Texture2D.whiteTexture);
+            GUI.color = held ? c : new Color(c.r * 0.22f, c.g * 0.22f, c.b * 0.22f, 0.88f);
+            GUI.DrawTexture(r, Texture2D.whiteTexture);
 
-            var ls = LabelStyle(22, FontStyle.Bold,
+            var ls = LabelStyle(28, FontStyle.Bold,
                 held ? Color.black : new Color(c.r * 0.8f, c.g * 0.8f, c.b * 0.8f));
             ls.alignment = TextAnchor.MiddleCenter;
             GUI.color    = Color.white;
-            GUI.Label(new Rect(x, sy, keyW, keyH), GroupLabels[g], ls);
+            GUI.Label(r, GroupLabels[g], ls);
         }
         GUI.color = Color.white;
     }
@@ -821,18 +851,19 @@ public class RhythmGameManager : MonoBehaviour
         GUI.Label(new Rect(0, 286, Screen.width, 36),
             $"MAX COMBO  {_maxCombo}", statStyle);
 
-        // Buttons
-        float btnY = Screen.height * 0.62f;
-        float btnW = 200f, btnH = 52f;
-        if (GUI.Button(new Rect(cx - btnW - 16, btnY, btnW, btnH), "RETRY"))
+        // Buttons（タッチしやすいサイズ）
+        float btnY = Screen.height * 0.60f;
+        float btnW = Mathf.Max(Screen.width * 0.28f, 220f);
+        float btnH = Mathf.Max(Screen.height * 0.10f, 64f);
+        if (GUI.Button(new Rect(cx - btnW - 20, btnY, btnW, btnH), "RETRY"))
             RetrySong();
-        if (GUI.Button(new Rect(cx + 16, btnY, btnW, btnH), "SELECT"))
+        if (GUI.Button(new Rect(cx + 20, btnY, btnW, btnH), "SELECT"))
             ReturnToSelect();
 
         var hint = LabelStyle(16, FontStyle.Normal, new Color(0.45f, 0.45f, 0.45f));
         hint.alignment = TextAnchor.MiddleCenter;
         GUI.Label(new Rect(0, btnY + btnH + 10, Screen.width, 28),
-            "R: Retry    ESC: Select", hint);
+            "R: Retry    ESC: Select    Tap button", hint);
     }
 
     // ---------------------------------------------------------------
