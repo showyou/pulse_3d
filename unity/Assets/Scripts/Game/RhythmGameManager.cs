@@ -193,7 +193,10 @@ public class RhythmGameManager : MonoBehaviour
             audioSource.clip = null;
         }
 
-        SetupBackgroundVideo(_chart.meta?.videoFile ?? "");
+        string videoFile  = _chart.meta?.videoFile  ?? "";
+        string audioFile2 = _chart.meta?.audioFile  ?? "";
+        bool videoHasAudio = !string.IsNullOrEmpty(videoFile) && string.IsNullOrEmpty(audioFile2);
+        SetupBackgroundVideo(videoFile, videoHasAudio);
         _statusMsg = "";
         StartGame();
     }
@@ -311,7 +314,7 @@ public class RhythmGameManager : MonoBehaviour
 
     // ---------------------------------------------------------------
     // Video (#12)
-    void SetupBackgroundVideo(string videoFile)
+    void SetupBackgroundVideo(string videoFile, bool videoHasAudio)
     {
         if (_videoPlayer != null) { Destroy(_videoPlayer.gameObject); _videoPlayer = null; }
         if (string.IsNullOrEmpty(videoFile)) return;
@@ -319,20 +322,32 @@ public class RhythmGameManager : MonoBehaviour
         string path = "file://" + Path.Combine(Application.streamingAssetsPath, "songs", videoFile);
         var go = new GameObject("BackgroundVideo");
         _videoPlayer = go.AddComponent<VideoPlayer>();
-        _videoPlayer.renderMode      = VideoRenderMode.CameraFarPlane;
-        _videoPlayer.targetCamera    = Camera.main;
-        _videoPlayer.audioOutputMode = VideoAudioOutputMode.None;
-        _videoPlayer.isLooping       = true;
-        _videoPlayer.playOnAwake     = false;
-        _videoPlayer.url             = path;
+        _videoPlayer.renderMode   = VideoRenderMode.CameraFarPlane;
+        _videoPlayer.targetCamera = Camera.main;
+        _videoPlayer.isLooping    = true;
+        _videoPlayer.playOnAwake  = false;
+        _videoPlayer.url          = path;
+
+        if (videoHasAudio)
+        {
+            _videoPlayer.audioOutputMode = VideoAudioOutputMode.AudioSource;
+            _videoPlayer.SetTargetAudioSource(0, audioSource);
+        }
+        else
+        {
+            _videoPlayer.audioOutputMode = VideoAudioOutputMode.None;
+        }
+
         _videoPlayer.Prepare();
     }
 
     IEnumerator PlayVideoWhenReady()
     {
         yield return new WaitUntil(() => _videoPlayer.isPrepared);
+        // BGM の PlayScheduled と同じタイミングまで待ってから再生
+        yield return new WaitUntil(() => AudioSettings.dspTime >= _startDspTime);
         double lag = AudioSettings.dspTime - _startDspTime;
-        if (lag > 0) _videoPlayer.time = lag;
+        if (lag > 0.01) _videoPlayer.time = lag;
         _videoPlayer.Play();
     }
 

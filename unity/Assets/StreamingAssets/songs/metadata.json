@@ -20,9 +20,9 @@
       "id": "deepness",
       "title": "Deepness",
       "bpm": 136.0,
-      "duration": 108200,
+      "duration": 108187,
       "mode": "rhythm",
-      "chart": "charts/deepness_fumen.json"
+      "chart": "charts/deepness.json"
     }
   ]
 }
