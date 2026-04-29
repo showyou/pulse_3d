@@ -142,7 +142,9 @@ public class RhythmGameManager : MonoBehaviour
                 ".wav"  => AudioType.WAV,
                 _       => AudioType.OGGVORBIS,
             };
-            using var req = UnityWebRequestMultimedia.GetAudioClip(audioPath, audioType);
+            var handler = new DownloadHandlerAudioClip(audioPath, audioType);
+            handler.streamAudio = false;
+            using var req = new UnityWebRequest(audioPath) { downloadHandler = handler };
             yield return req.SendWebRequest();
             if (req.result == UnityWebRequest.Result.Success)
                 audioSource.clip = DownloadHandlerAudioClip.GetContent(req);
