@@ -134,7 +134,7 @@ public class RhythmGameManager : MonoBehaviour
         string audioFile = _chart.meta?.audioFile ?? "";
         if (!string.IsNullOrEmpty(audioFile))
         {
-            string audioPath = "file://" + Path.Combine(Application.streamingAssetsPath, "songs", audioFile);
+            string audioPath = new Uri(Path.Combine(Application.streamingAssetsPath, "songs", audioFile)).AbsoluteUri;
             _statusMsg = "Loading audio...";
             var audioType = Path.GetExtension(audioFile).ToLower() switch {
                 ".ogg"  => AudioType.OGGVORBIS,
