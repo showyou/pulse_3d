@@ -351,20 +351,29 @@ public class RhythmGameManager : MonoBehaviour
         mat.mainTexture = _videoRt; // 保険：URP/Built-in両対応
         _bgQuad.GetComponent<Renderer>().material = mat;
 
+        Application.runInBackground = true; // Editor非フォーカスでも更新を続ける
+
         string path = new Uri(Path.Combine(Application.streamingAssetsPath, "songs", videoFile)).AbsoluteUri;
         var go = new GameObject("BackgroundVideo");
         _videoPlayer = go.AddComponent<VideoPlayer>();
+        _videoPlayer.source          = VideoSource.Url;
+        _videoPlayer.url             = path;
         _videoPlayer.renderMode      = VideoRenderMode.RenderTexture;
         _videoPlayer.targetTexture   = _videoRt;
         _videoPlayer.isLooping       = true;
         _videoPlayer.playOnAwake     = false;
-        _videoPlayer.url             = path;
         // 重要: trueだと描画完了を待ってtimeが進まなくなるケースがある
         _videoPlayer.waitForFirstFrame = false;
         _videoPlayer.skipOnDrop      = true;
+        _videoPlayer.playbackSpeed   = 1.0f;
+        // デフォルトのAudioDSPTimeSourceで詰まる事例があるためゲーム時間に固定
+        _videoPlayer.timeSource      = VideoTimeSource.GameTimeSource;
         _videoPlayer.audioOutputMode = videoHasAudio ? VideoAudioOutputMode.Direct : VideoAudioOutputMode.None;
         _videoPlayer.errorReceived    += (vp, msg) => Debug.LogWarning($"[PULSE] Video error: {msg}");
         _videoPlayer.prepareCompleted += vp => Debug.Log($"[PULSE] Video prepared OK  size={vp.width}x{vp.height}  framerate={vp.frameRate:F2}");
+        // フレームデコードが進んでるかを最初の数枚だけ確認
+        _videoPlayer.sendFrameReadyEvents = true;
+        _videoPlayer.frameReady += (vp, idx) => { if (idx < 5) Debug.Log($"[PULSE] Frame ready: {idx}"); };
         _videoPlayer.Prepare();
 
         Debug.Log($"[PULSE] BgQuad+RT: shader='{shader?.name}' texProp={texProp} rt={_videoRt.width}x{_videoRt.height}");
