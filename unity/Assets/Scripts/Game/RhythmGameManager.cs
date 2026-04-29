@@ -637,14 +637,18 @@ public class RhythmGameManager : MonoBehaviour
         }
     }
 
-    // -- Select screen (#10, #11) --
+    // -- Select screen --
     void DrawSelectScreen()
     {
-        DrawDarkOverlay(0.75f);
+        DrawDarkOverlay(0.82f);
 
-        var titleStyle = LabelStyle(52, FontStyle.Bold, new Color(0.35f, 0.75f, 1f));
+        // タイトル + アクセントライン
+        var titleStyle = LabelStyle(56, FontStyle.Bold, new Color(0.0f, 0.92f, 0.88f));
         titleStyle.alignment = TextAnchor.MiddleCenter;
-        GUI.Label(new Rect(0, 30, Screen.width, 68), "PULSE 3D", titleStyle);
+        GUI.Label(new Rect(0, 22, Screen.width, 70), "PULSE 3D", titleStyle);
+        GUI.color = new Color(0.0f, 0.92f, 0.88f, 0.4f);
+        GUI.DrawTexture(new Rect(Screen.width * 0.3f, 95, Screen.width * 0.4f, 1f), Texture2D.whiteTexture);
+        GUI.color = Color.white;
 
         if (_songList == null || _songList.songs.Length == 0)
         {
@@ -728,13 +732,14 @@ public class RhythmGameManager : MonoBehaviour
         GUI.Label(new Rect(0, Screen.height * 0.45f, Screen.width, 50), _statusMsg, s);
     }
 
-    // -- Playing UI (#11) --
+    // -- Playing UI --
     void DrawPlayingUI()
     {
+        DrawKeyIndicators();
         DrawProgressBar();
         DrawScoreCombo();
         DrawJudgment();
-        DrawKeyIndicators();
+        DrawTimeDisplay();
         DrawAutoButton();
     }
 
@@ -742,38 +747,61 @@ public class RhythmGameManager : MonoBehaviour
     {
         float dur = _chart?.meta?.duration > 0 ? _chart.meta.duration / 1000f : 1f;
         float p   = Mathf.Clamp01(MusicTime / dur);
+        float barH = 5f;
+        float barY = Screen.height - barH;
 
-        GUI.color = new Color(0.08f, 0.08f, 0.15f, 0.9f);
-        GUI.DrawTexture(new Rect(0, 0, Screen.width, 6), Texture2D.whiteTexture);
-        GUI.color = new Color(0.3f, 0.65f, 1f);
-        GUI.DrawTexture(new Rect(0, 0, Screen.width * p, 6), Texture2D.whiteTexture);
+        GUI.color = new Color(0.04f, 0.04f, 0.10f, 1f);
+        GUI.DrawTexture(new Rect(0, barY, Screen.width, barH), Texture2D.whiteTexture);
+        GUI.color = new Color(0.0f, 0.92f, 0.88f, 1f);
+        GUI.DrawTexture(new Rect(0, barY, Screen.width * p, barH), Texture2D.whiteTexture);
         GUI.color = Color.white;
     }
 
     void DrawScoreCombo()
     {
-        GUI.Label(new Rect(16, 14, 320, 46), $"{_score:N0}",
-            LabelStyle(34, FontStyle.Bold, Color.white));
+        // スコア（左上）
+        var numStyle = LabelStyle(54, FontStyle.Bold, Color.white);
+        GUI.Label(new Rect(20, 14, 400, 68), $"{_score:N0}", numStyle);
+        var subStyle = LabelStyle(16, FontStyle.Normal, new Color(0.45f, 0.45f, 0.55f));
+        GUI.Label(new Rect(22, 80, 160, 22), "SCORE", subStyle);
+
+        // コンボ（左70%）
         if (_combo > 1)
         {
-            float cx = Screen.width * 0.62f;
-            float cy = Screen.height * 0.28f;
-            var s = LabelStyle(30, FontStyle.Bold, new Color(1f, 0.9f, 0.25f));
-            s.alignment = TextAnchor.MiddleCenter;
-            GUI.Label(new Rect(cx - 120, cy, 240, 44), $"x{_combo} COMBO", s);
+            float cx = Screen.width * 0.70f;
+            float cy = Screen.height * 0.18f;
+            var cNum = LabelStyle(88, FontStyle.Bold, new Color(0.0f, 0.95f, 0.88f));
+            cNum.alignment = TextAnchor.MiddleCenter;
+            GUI.Label(new Rect(cx - 180, cy, 360, 108), $"{_combo}", cNum);
+
+            var cSub = LabelStyle(22, FontStyle.Bold, new Color(0.0f, 0.72f, 0.68f));
+            cSub.alignment = TextAnchor.MiddleCenter;
+            GUI.Label(new Rect(cx - 140, cy + 110, 280, 30), "COMBO", cSub);
         }
     }
 
     void DrawJudgment()
     {
         if (_judgmentTimer <= 0f) return;
-        float alpha = Mathf.Clamp01(_judgmentTimer / 0.25f);
-        Color c = _judgmentText == "PERFECT" ? new Color(1f, 0.95f, 0.2f, alpha)
-                : _judgmentText == "GOOD"    ? new Color(0.2f, 0.9f, 1f,  alpha)
-                :                              new Color(1f,  0.25f, 0.25f, alpha);
-        var s = LabelStyle(50, FontStyle.Bold, c);
+        float ratio = _judgmentTimer / 0.6f;
+        float alpha = Mathf.Clamp01(ratio / 0.4f);
+        // ポップアップ感: 出始めにスケールが弾む
+        float pop   = 1f + Mathf.Sin(Mathf.PI * Mathf.Clamp01(1f - ratio) * 3f) * 0.06f;
+        int   fsize = Mathf.RoundToInt(62 * pop);
+
+        string text = _judgmentText == "MISS" ? "MISS" : _judgmentText + "!";
+        Color c = _judgmentText == "PERFECT" ? new Color(0.0f, 0.95f, 0.88f, alpha)
+                : _judgmentText == "GOOD"    ? new Color(0.35f, 0.75f, 1.0f, alpha)
+                :                              new Color(1.0f,  0.22f, 0.22f, alpha);
+
+        // 影
+        var shadow = LabelStyle(fsize, FontStyle.Bold, new Color(0f, 0f, 0f, alpha * 0.55f));
+        shadow.alignment = TextAnchor.MiddleCenter;
+        GUI.Label(new Rect(3, Screen.height * 0.20f + 3, Screen.width, 80), text, shadow);
+
+        var s = LabelStyle(fsize, FontStyle.Bold, c);
         s.alignment = TextAnchor.MiddleCenter;
-        GUI.Label(new Rect(0, Screen.height * 0.34f, Screen.width, 64), _judgmentText, s);
+        GUI.Label(new Rect(0, Screen.height * 0.20f, Screen.width, 80), text, s);
     }
 
     // タッチゾーンと描画を共有するグループRect
@@ -781,7 +809,7 @@ public class RhythmGameManager : MonoBehaviour
     {
         float keyH = Mathf.Max(Screen.height * 0.18f, 64f);
         float keyW = Screen.width / 6f;
-        return new Rect(g * keyW, Screen.height - keyH, keyW, keyH);
+        return new Rect(g * keyW, Screen.height - keyH - 5f, keyW, keyH);
     }
 
     void DrawKeyIndicators()
@@ -792,34 +820,59 @@ public class RhythmGameManager : MonoBehaviour
             Color c    = GroupColors[g];
             bool  held = _keyHeld[g];
 
-            GUI.color = held ? c : new Color(c.r * 0.22f, c.g * 0.22f, c.b * 0.22f, 0.88f);
+            // 背景: 押していない時はほぼ黒、押した時は鮮明
+            GUI.color = held
+                ? new Color(c.r, c.g, c.b, 1.0f)
+                : new Color(c.r * 0.08f, c.g * 0.08f, c.b * 0.08f, 0.95f);
             GUI.DrawTexture(r, Texture2D.whiteTexture);
 
-            var ls = LabelStyle(28, FontStyle.Bold,
-                held ? Color.black : new Color(c.r * 0.8f, c.g * 0.8f, c.b * 0.8f));
+            // 上部アクセントライン（押していない時だけ）
+            if (!held)
+            {
+                GUI.color = new Color(c.r * 0.5f, c.g * 0.5f, c.b * 0.5f, 0.8f);
+                GUI.DrawTexture(new Rect(r.x + 1, r.y, r.width - 2, 2f), Texture2D.whiteTexture);
+            }
+
+            // ラベル
+            Color lc = held ? Color.black : new Color(c.r * 0.55f, c.g * 0.55f, c.b * 0.55f);
+            var ls = LabelStyle(32, FontStyle.Bold, lc);
             ls.alignment = TextAnchor.MiddleCenter;
-            GUI.color    = Color.white;
+            GUI.color = Color.white;
             GUI.Label(r, GroupLabels[g], ls);
         }
         GUI.color = Color.white;
     }
 
+    void DrawTimeDisplay()
+    {
+        float now = Mathf.Max(0f, MusicTime);
+        float dur = _chart?.meta?.duration > 0 ? _chart.meta.duration / 1000f : 0f;
+        string t  = $"{(int)(now / 60)}:{(int)(now % 60):D2} / {(int)(dur / 60)}:{(int)(dur % 60):D2}";
+        var s = LabelStyle(19, FontStyle.Bold, new Color(0.2f, 0.65f, 0.85f, 0.85f));
+        s.alignment = TextAnchor.MiddleRight;
+        float keyH = GroupRect(0).height;
+        GUI.Label(new Rect(Screen.width - 220, Screen.height - keyH - 36, 210, 26), t, s);
+    }
+
     void DrawAutoButton()
     {
-        var s = LabelStyle(20, FontStyle.Bold, autoPlay ? Color.cyan : new Color(0.6f, 0.6f, 0.6f));
+        var s = LabelStyle(17, FontStyle.Bold, autoPlay ? new Color(0f, 0.9f, 0.85f) : new Color(0.4f, 0.4f, 0.4f));
         s.alignment = TextAnchor.MiddleCenter;
-        if (GUI.Button(new Rect(Screen.width - 140, 10, 130, 34), autoPlay ? "AUTO: ON" : "AUTO: OFF"))
+        if (GUI.Button(new Rect(Screen.width - 120, 12, 108, 30), autoPlay ? "AUTO: ON" : "AUTO: OFF"))
             autoPlay = !autoPlay;
     }
 
-    // -- Result screen (#8, #11) --
+    // -- Result screen --
     void DrawResultScreen()
     {
-        DrawDarkOverlay(0.88f);
+        DrawDarkOverlay(0.92f);
 
-        var titleStyle = LabelStyle(56, FontStyle.Bold, new Color(0.35f, 0.75f, 1f));
+        var titleStyle = LabelStyle(56, FontStyle.Bold, new Color(0.0f, 0.92f, 0.88f));
         titleStyle.alignment = TextAnchor.MiddleCenter;
-        GUI.Label(new Rect(0, 30, Screen.width, 72), "RESULT", titleStyle);
+        GUI.Label(new Rect(0, 24, Screen.width, 70), "RESULT", titleStyle);
+        GUI.color = new Color(0.0f, 0.92f, 0.88f, 0.35f);
+        GUI.DrawTexture(new Rect(Screen.width * 0.3f, 96, Screen.width * 0.4f, 1f), Texture2D.whiteTexture);
+        GUI.color = Color.white;
 
         string songTitle = _currentSong?.title ?? _chart?.meta?.title ?? "";
         var songStyle = LabelStyle(28, FontStyle.Normal, new Color(0.75f, 0.75f, 0.75f));
