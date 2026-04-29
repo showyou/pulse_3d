@@ -759,20 +759,22 @@ public class RhythmGameManager : MonoBehaviour
 
     void DrawScoreCombo()
     {
-        // スコア（左上）
+        // スコア（左上）：縁取りあり
         var numStyle = LabelStyle(54, FontStyle.Bold, Color.white);
-        GUI.Label(new Rect(20, 14, 400, 68), $"{_score:N0}", numStyle);
+        OutlineLabel(new Rect(20, 14, 400, 68), $"{_score:N0}", numStyle,
+            new Color(0f, 0f, 0f, 0.85f), 2f);
         var subStyle = LabelStyle(16, FontStyle.Normal, new Color(0.45f, 0.45f, 0.55f));
         GUI.Label(new Rect(22, 80, 160, 22), "SCORE", subStyle);
 
-        // コンボ（左70%）
+        // コンボ（右寄り・縦中段）：縁取りあり
         if (_combo > 1)
         {
-            float cx = Screen.width * 0.70f;
-            float cy = Screen.height * 0.18f;
+            float cx = Screen.width * 0.80f;
+            float cy = Screen.height * 0.38f;
             var cNum = LabelStyle(88, FontStyle.Bold, new Color(0.0f, 0.95f, 0.88f));
             cNum.alignment = TextAnchor.MiddleCenter;
-            GUI.Label(new Rect(cx - 180, cy, 360, 108), $"{_combo}", cNum);
+            OutlineLabel(new Rect(cx - 180, cy, 360, 108), $"{_combo}",
+                cNum, new Color(0f, 0f, 0f, 0.8f), 2f);
 
             var cSub = LabelStyle(22, FontStyle.Bold, new Color(0.0f, 0.72f, 0.68f));
             cSub.alignment = TextAnchor.MiddleCenter;
@@ -794,14 +796,10 @@ public class RhythmGameManager : MonoBehaviour
                 : _judgmentText == "GOOD"    ? new Color(0.35f, 0.75f, 1.0f, alpha)
                 :                              new Color(1.0f,  0.22f, 0.22f, alpha);
 
-        // 影
-        var shadow = LabelStyle(fsize, FontStyle.Bold, new Color(0f, 0f, 0f, alpha * 0.55f));
-        shadow.alignment = TextAnchor.MiddleCenter;
-        GUI.Label(new Rect(3, Screen.height * 0.20f + 3, Screen.width, 80), text, shadow);
-
         var s = LabelStyle(fsize, FontStyle.Bold, c);
         s.alignment = TextAnchor.MiddleCenter;
-        GUI.Label(new Rect(0, Screen.height * 0.20f, Screen.width, 80), text, s);
+        OutlineLabel(new Rect(0, Screen.height * 0.20f, Screen.width, 80), text,
+            s, new Color(0f, 0f, 0f, alpha * 0.7f), 2.2f);
     }
 
     // タッチゾーンと描画を共有するグループRect
@@ -930,6 +928,20 @@ public class RhythmGameManager : MonoBehaviour
         var s = new GUIStyle(GUI.skin.label) { fontSize = size, fontStyle = style };
         s.normal.textColor = color;
         return s;
+    }
+
+    // 8方向にずらして縁取り描画してから本体色で上書き
+    static void OutlineLabel(Rect r, string text, GUIStyle style, Color outline, float d = 1.8f)
+    {
+        var os = new GUIStyle(style);
+        os.normal.textColor = outline;
+        for (int dx = -1; dx <= 1; dx++)
+            for (int dy = -1; dy <= 1; dy++)
+            {
+                if (dx == 0 && dy == 0) continue;
+                GUI.Label(new Rect(r.x + dx * d, r.y + dy * d, r.width, r.height), text, os);
+            }
+        GUI.Label(r, text, style);
     }
 
     static void SetupCamera()
