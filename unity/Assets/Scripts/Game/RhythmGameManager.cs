@@ -321,9 +321,11 @@ public class RhythmGameManager : MonoBehaviour
     void SetupBackgroundVideo(string videoFile, bool videoHasAudio)
     {
         if (_videoPlayer != null) { Destroy(_videoPlayer.gameObject); _videoPlayer = null; }
-        if (string.IsNullOrEmpty(videoFile)) return;
+        if (string.IsNullOrEmpty(videoFile)) { Debug.Log("[PULSE] Video: no videoFile"); return; }
 
         string path = new Uri(Path.Combine(Application.streamingAssetsPath, "songs", videoFile)).AbsoluteUri;
+        Debug.Log($"[PULSE] Video URL: {path}  hasAudio={videoHasAudio}");
+
         var go = new GameObject("BackgroundVideo");
         _videoPlayer = go.AddComponent<VideoPlayer>();
         _videoPlayer.renderMode   = VideoRenderMode.CameraFarPlane;
@@ -331,18 +333,21 @@ public class RhythmGameManager : MonoBehaviour
         _videoPlayer.isLooping    = true;
         _videoPlayer.playOnAwake  = false;
         _videoPlayer.url          = path;
-
         _videoPlayer.audioOutputMode = videoHasAudio
             ? VideoAudioOutputMode.Direct
             : VideoAudioOutputMode.None;
-
+        _videoPlayer.errorReceived += (vp, msg) => Debug.LogWarning($"[PULSE] Video error: {msg}");
+        _videoPlayer.prepareCompleted += vp => Debug.Log("[PULSE] Video prepared OK");
         _videoPlayer.Prepare();
     }
 
     IEnumerator PlayVideoWhenReady()
     {
+        Debug.Log("[PULSE] PlayVideoWhenReady: waiting for isPrepared");
         yield return new WaitUntil(() => _videoPlayer.isPrepared);
+        Debug.Log("[PULSE] PlayVideoWhenReady: prepared, waiting for startDspTime");
         yield return new WaitUntil(() => AudioSettings.dspTime >= _startDspTime);
+        Debug.Log("[PULSE] PlayVideoWhenReady: Play()");
         _videoPlayer.Play();
     }
 
