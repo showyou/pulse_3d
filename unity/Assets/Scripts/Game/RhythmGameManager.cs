@@ -51,6 +51,13 @@ public class RhythmGameManager : MonoBehaviour
     // Note pool (#4)
     readonly Queue<NoteController> _notePool = new Queue<NoteController>();
 
+    // Hit SE (#13)
+    AudioSource _hitSeSource;
+    AudioClip   _hitClip;
+
+    // Hit effect pool (#14)
+    readonly Queue<HitEffectController> _effectPool = new Queue<HitEffectController>();
+
     // UI
     string _judgmentText  = "";
     float  _judgmentTimer;
@@ -87,6 +94,10 @@ public class RhythmGameManager : MonoBehaviour
 
         if (audioSource == null)
             audioSource = gameObject.AddComponent<AudioSource>();
+
+        _hitSeSource       = gameObject.AddComponent<AudioSource>();
+        _hitSeSource.playOnAwake = false;
+        _hitClip           = GenerateHitClip();
 
         LoadMetadata();
     }
@@ -393,6 +404,53 @@ public class RhythmGameManager : MonoBehaviour
     void ReturnNote(NoteController n) => _notePool.Enqueue(n);
 
     // ---------------------------------------------------------------
+    // Hit SE (#13)
+    static AudioClip GenerateHitClip()
+    {
+        const int sampleRate = 44100;
+        int len = (int)(sampleRate * 0.07f);
+        var clip = AudioClip.Create("HitSE", len, 1, sampleRate, false);
+        var data = new float[len];
+        for (int i = 0; i < len; i++)
+        {
+            float t    = (float)i / len;
+            float freq = Mathf.Lerp(1200f, 600f, t);
+            float env  = Mathf.Pow(1f - t, 1.8f);
+            data[i] = Mathf.Sin(2f * Mathf.PI * freq * i / sampleRate) * env * 0.55f;
+        }
+        clip.SetData(data, 0);
+        return clip;
+    }
+
+    // ---------------------------------------------------------------
+    // Hit effect pool (#14)
+    void SpawnHitEffect(NoteController note, Judgment j)
+    {
+        HitEffectController eff;
+        if (_effectPool.Count > 0)
+        {
+            eff = _effectPool.Dequeue();
+            eff.gameObject.SetActive(true);
+        }
+        else
+        {
+            var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            go.name = "HitEffect";
+            Destroy(go.GetComponent<Collider>());
+            eff = go.AddComponent<HitEffectController>();
+        }
+
+        Color c = j == Judgment.Perfect
+            ? new Color(1.0f, 0.95f, 0.2f, 1f)
+            : new Color(0.2f, 0.9f, 1.0f, 1f);
+
+        float x = note.transform.position.x;
+        eff.Play(new Vector3(x, 0.06f, GameConstants.NOTE_Z_HIT), c, ReturnEffect);
+    }
+
+    void ReturnEffect(HitEffectController e) => _effectPool.Enqueue(e);
+
+    // ---------------------------------------------------------------
     // Autoplay (#9)
     void AutoPlayUpdate()
     {
@@ -456,6 +514,8 @@ public class RhythmGameManager : MonoBehaviour
         var j = err <= GameConstants.HIT_WINDOW_PERFECT ? Judgment.Perfect : Judgment.Good;
 
         RegisterJudgment(j);
+        SpawnHitEffect(best, j);
+        _hitSeSource.PlayOneShot(_hitClip, 0.7f);
         best.OnHit();
         _highway.FlashLight(group);
         RemoveFromLanes(best);
@@ -668,8 +728,13 @@ public class RhythmGameManager : MonoBehaviour
         GUI.Label(new Rect(16, 14, 320, 46), $"{_score:N0}",
             LabelStyle(34, FontStyle.Bold, Color.white));
         if (_combo > 1)
-            GUI.Label(new Rect(16, 58, 200, 34), $"x{_combo} COMBO",
-                LabelStyle(22, FontStyle.Bold, new Color(1f, 0.9f, 0.25f)));
+        {
+            float cx = Screen.width * 0.62f;
+            float cy = Screen.height * 0.28f;
+            var s = LabelStyle(30, FontStyle.Bold, new Color(1f, 0.9f, 0.25f));
+            s.alignment = TextAnchor.MiddleCenter;
+            GUI.Label(new Rect(cx - 120, cy, 240, 44), $"x{_combo} COMBO", s);
+        }
     }
 
     void DrawJudgment()
