@@ -48,6 +48,8 @@ public class RhythmGameManager : MonoBehaviour
     InputHandler   _input;
     HighwayBuilder _highway;
     VideoPlayer    _videoPlayer;
+    RenderTexture  _videoRt;
+    GameObject     _bgQuad;
 
     // Note pool (#4)
     readonly Queue<NoteController> _notePool = new Queue<NoteController>();
@@ -311,6 +313,8 @@ public class RhythmGameManager : MonoBehaviour
     void ReturnToSelect()
     {
         if (_videoPlayer != null) { Destroy(_videoPlayer.gameObject); _videoPlayer = null; }
+        if (_bgQuad != null)      { Destroy(_bgQuad); _bgQuad = null; }
+        if (_videoRt  != null)    { _videoRt.Release(); Destroy(_videoRt); _videoRt = null; }
         audioSource.Stop();
         audioSource.clip = null;
         _state = GameState.Select;
@@ -321,33 +325,57 @@ public class RhythmGameManager : MonoBehaviour
     void SetupBackgroundVideo(string videoFile, bool videoHasAudio)
     {
         if (_videoPlayer != null) { Destroy(_videoPlayer.gameObject); _videoPlayer = null; }
-        if (string.IsNullOrEmpty(videoFile)) { Debug.Log("[PULSE] Video: no videoFile"); return; }
+        if (_bgQuad != null)      { Destroy(_bgQuad); _bgQuad = null; }
+        if (_videoRt  != null)    { _videoRt.Release(); Destroy(_videoRt); _videoRt = null; }
+        if (string.IsNullOrEmpty(videoFile)) return;
+
+        _videoRt = new RenderTexture(1920, 1080, 0);
+        _videoRt.Create();
 
         string path = new Uri(Path.Combine(Application.streamingAssetsPath, "songs", videoFile)).AbsoluteUri;
-        Debug.Log($"[PULSE] Video URL: {path}  hasAudio={videoHasAudio}");
-
         var go = new GameObject("BackgroundVideo");
         _videoPlayer = go.AddComponent<VideoPlayer>();
-        _videoPlayer.renderMode   = VideoRenderMode.CameraFarPlane;
-        _videoPlayer.targetCamera = Camera.main;
-        _videoPlayer.isLooping    = true;
-        _videoPlayer.playOnAwake  = false;
-        _videoPlayer.url          = path;
-        _videoPlayer.audioOutputMode = videoHasAudio
-            ? VideoAudioOutputMode.Direct
-            : VideoAudioOutputMode.None;
-        _videoPlayer.errorReceived += (vp, msg) => Debug.LogWarning($"[PULSE] Video error: {msg}");
+        _videoPlayer.renderMode    = VideoRenderMode.RenderTexture;
+        _videoPlayer.targetTexture = _videoRt;
+        _videoPlayer.isLooping     = true;
+        _videoPlayer.playOnAwake   = false;
+        _videoPlayer.url           = path;
+        _videoPlayer.audioOutputMode = videoHasAudio ? VideoAudioOutputMode.Direct : VideoAudioOutputMode.None;
+        _videoPlayer.errorReceived    += (vp, msg) => Debug.LogWarning($"[PULSE] Video error: {msg}");
         _videoPlayer.prepareCompleted += vp => Debug.Log("[PULSE] Video prepared OK");
         _videoPlayer.Prepare();
+
+        Camera cam = Camera.main;
+        if (cam == null) return;
+
+        _bgQuad = GameObject.CreatePrimitive(PrimitiveType.Quad);
+        _bgQuad.name = "BgVideoQuad";
+        Destroy(_bgQuad.GetComponent<Collider>());
+        _bgQuad.transform.SetParent(cam.transform, false);
+
+        // カメラのFOVと距離からちょうど画面を埋めるサイズを計算
+        const float dist = 100f;
+        float h = 2f * dist * Mathf.Tan(cam.fieldOfView * 0.5f * Mathf.Deg2Rad);
+        float w = h * cam.aspect;
+        _bgQuad.transform.localPosition    = new Vector3(0f, 0f, dist);
+        // Y軸180°で法線をカメラ方向へ。X反転でテクスチャの鏡像を補正
+        _bgQuad.transform.localEulerAngles = new Vector3(0f, 180f, 0f);
+        _bgQuad.transform.localScale       = new Vector3(-w, h, 1f);
+
+        var shader = Shader.Find("Universal Render Pipeline/Unlit")
+                  ?? Shader.Find("Unlit/Texture");
+        var mat = new Material(shader);
+        if (mat.HasProperty("_BaseMap"))
+            mat.SetTexture("_BaseMap", _videoRt);
+        else
+            mat.mainTexture = _videoRt;
+        _bgQuad.GetComponent<Renderer>().material = mat;
     }
 
     IEnumerator PlayVideoWhenReady()
     {
-        Debug.Log("[PULSE] PlayVideoWhenReady: waiting for isPrepared");
         yield return new WaitUntil(() => _videoPlayer.isPrepared);
-        Debug.Log("[PULSE] PlayVideoWhenReady: prepared, waiting for startDspTime");
         yield return new WaitUntil(() => AudioSettings.dspTime >= _startDspTime);
-        Debug.Log("[PULSE] PlayVideoWhenReady: Play()");
         _videoPlayer.Play();
     }
 
