@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.Networking;
 using UnityEngine.Video;
 
@@ -273,8 +274,12 @@ public class RhythmGameManager : MonoBehaviour
         }
         if (_state == GameState.Result)
         {
-            if (Input.GetKeyDown(KeyCode.R)) RetrySong();
-            if (Input.GetKeyDown(KeyCode.Escape)) ReturnToSelect();
+            var kb = Keyboard.current;
+            if (kb != null)
+            {
+                if (kb[Key.R].wasPressedThisFrame) RetrySong();
+                if (kb[Key.Escape].wasPressedThisFrame) ReturnToSelect();
+            }
             return;
         }
         if (_state != GameState.Playing || !_isPlaying || _chart == null) return;
@@ -299,11 +304,13 @@ public class RhythmGameManager : MonoBehaviour
     void HandleSelectInput()
     {
         if (_songList == null || _songList.songs.Length == 0) return;
-        if (Input.GetKeyDown(KeyCode.UpArrow))
+        var kb = Keyboard.current;
+        if (kb == null) return;
+        if (kb[Key.UpArrow].wasPressedThisFrame)
             _selectedIndex = Mathf.Max(0, _selectedIndex - 1);
-        if (Input.GetKeyDown(KeyCode.DownArrow))
+        if (kb[Key.DownArrow].wasPressedThisFrame)
             _selectedIndex = Mathf.Min(_songList.songs.Length - 1, _selectedIndex + 1);
-        if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.Space))
+        if (kb[Key.Enter].wasPressedThisFrame || kb[Key.Space].wasPressedThisFrame)
             StartLoadingSong(_songList.songs[_selectedIndex]);
     }
 
