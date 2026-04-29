@@ -136,7 +136,13 @@ public class RhythmGameManager : MonoBehaviour
         {
             string audioPath = "file://" + Path.Combine(Application.streamingAssetsPath, "songs", audioFile);
             _statusMsg = "Loading audio...";
-            using var req = UnityWebRequestMultimedia.GetAudioClip(audioPath, AudioType.UNKNOWN);
+            var audioType = Path.GetExtension(audioFile).ToLower() switch {
+                ".ogg"  => AudioType.OGGVORBIS,
+                ".mp3"  => AudioType.MPEG,
+                ".wav"  => AudioType.WAV,
+                _       => AudioType.OGGVORBIS,
+            };
+            using var req = UnityWebRequestMultimedia.GetAudioClip(audioPath, audioType);
             yield return req.SendWebRequest();
             if (req.result == UnityWebRequest.Result.Success)
                 audioSource.clip = DownloadHandlerAudioClip.GetContent(req);
