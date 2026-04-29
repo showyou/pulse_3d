@@ -166,7 +166,7 @@ public class RhythmGameManager : MonoBehaviour
         try
         {
             var data = JsonUtility.FromJson<ChartData>(json);
-            if (data?.meta != null && data.notes?.Count > 0)
+            if (data?.format == "pulse3d_v1" && data.notes?.Count > 0)
                 return data;
         }
         catch (Exception e) { Debug.LogWarning($"[PULSE] ChartData parse: {e.Message}"); }
