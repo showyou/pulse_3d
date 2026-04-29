@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
@@ -156,11 +157,24 @@ public class RhythmGameManager : MonoBehaviour
     // Chart parsing (#6)
     ChartData ParseChart(string json)
     {
-        var data = JsonUtility.FromJson<ChartData>(json);
-        if (data?.meta != null && data.notes?.Count > 0)
-            return data;
+        // Strip BOM and any leading non-JSON text (e.g. accidental ```json markers)
+        json = json.TrimStart('\xEF', '\xBB', '\xBF');
+        int brace = json.IndexOf('{');
+        if (brace > 0) json = json.Substring(brace);
+        json = json.Trim();
 
-        var fumen = JsonUtility.FromJson<FumenRoot>(json);
+        try
+        {
+            var data = JsonUtility.FromJson<ChartData>(json);
+            if (data?.meta != null && data.notes?.Count > 0)
+                return data;
+        }
+        catch (Exception e) { Debug.LogWarning($"[PULSE] ChartData parse: {e.Message}"); }
+
+        FumenRoot fumen = null;
+        try { fumen = JsonUtility.FromJson<FumenRoot>(json); }
+        catch (Exception e) { Debug.LogWarning($"[PULSE] FumenRoot parse: {e.Message}"); return null; }
+
         if (fumen?.notes == null || fumen.notes.Count == 0) return null;
 
         var chart  = new ChartData();
