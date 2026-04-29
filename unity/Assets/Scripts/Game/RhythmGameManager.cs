@@ -160,6 +160,12 @@ public class RhythmGameManager : MonoBehaviour
                 if (req.result == UnityWebRequest.Result.Success)
                 {
                     var clip = DownloadHandlerAudioClip.GetContent(req);
+                    if (clip != null)
+                    {
+                        clip.name = Path.GetFileNameWithoutExtension(audioFile);
+                        if (clip.loadState != AudioDataLoadState.Loaded)
+                            clip.LoadAudioData();
+                    }
                     Debug.Log($"[PULSE] Clip loaded: name='{clip?.name}'  samples={clip?.samples}  channels={clip?.channels}  freq={clip?.frequency}  state={clip?.loadState}");
                     audioSource.clip = clip;
                 }
