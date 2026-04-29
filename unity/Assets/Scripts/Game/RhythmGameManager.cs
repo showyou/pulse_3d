@@ -807,9 +807,10 @@ public class RhythmGameManager : MonoBehaviour
     // タッチゾーンと描画を共有するグループRect
     Rect GroupRect(int g)
     {
-        float keyH = Mathf.Max(Screen.height * 0.18f, 64f);
-        float keyW = Screen.width / 6f;
-        return new Rect(g * keyW, Screen.height - keyH - 5f, keyW, keyH);
+        const float keyW = 72f, keyH = 48f, gap = 6f;
+        float sx = (Screen.width - (6 * keyW + 5 * gap)) * 0.5f;
+        float sy = Screen.height - keyH - 14f;
+        return new Rect(sx + g * (keyW + gap), sy, keyW, keyH);
     }
 
     void DrawKeyIndicators()
@@ -820,22 +821,19 @@ public class RhythmGameManager : MonoBehaviour
             Color c    = GroupColors[g];
             bool  held = _keyHeld[g];
 
-            // 背景: 押していない時はほぼ黒、押した時は鮮明
             GUI.color = held
                 ? new Color(c.r, c.g, c.b, 1.0f)
                 : new Color(c.r * 0.08f, c.g * 0.08f, c.b * 0.08f, 0.95f);
             GUI.DrawTexture(r, Texture2D.whiteTexture);
 
-            // 上部アクセントライン（押していない時だけ）
             if (!held)
             {
                 GUI.color = new Color(c.r * 0.5f, c.g * 0.5f, c.b * 0.5f, 0.8f);
                 GUI.DrawTexture(new Rect(r.x + 1, r.y, r.width - 2, 2f), Texture2D.whiteTexture);
             }
 
-            // ラベル
             Color lc = held ? Color.black : new Color(c.r * 0.55f, c.g * 0.55f, c.b * 0.55f);
-            var ls = LabelStyle(32, FontStyle.Bold, lc);
+            var ls = LabelStyle(22, FontStyle.Bold, lc);
             ls.alignment = TextAnchor.MiddleCenter;
             GUI.color = Color.white;
             GUI.Label(r, GroupLabels[g], ls);
@@ -850,8 +848,7 @@ public class RhythmGameManager : MonoBehaviour
         string t  = $"{(int)(now / 60)}:{(int)(now % 60):D2} / {(int)(dur / 60)}:{(int)(dur % 60):D2}";
         var s = LabelStyle(19, FontStyle.Bold, new Color(0.2f, 0.65f, 0.85f, 0.85f));
         s.alignment = TextAnchor.MiddleRight;
-        float keyH = GroupRect(0).height;
-        GUI.Label(new Rect(Screen.width - 220, Screen.height - keyH - 36, 210, 26), t, s);
+        GUI.Label(new Rect(Screen.width - 220, Screen.height - 98, 210, 26), t, s);
     }
 
     void DrawAutoButton()
