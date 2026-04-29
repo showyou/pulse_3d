@@ -329,7 +329,10 @@ public class RhythmGameManager : MonoBehaviour
         if (_videoRt  != null)    { _videoRt.Release(); Destroy(_videoRt); _videoRt = null; }
         if (string.IsNullOrEmpty(videoFile)) return;
 
-        // Quadを先に作る（VideoPlayerが直接このRendererのMaterialに書き込む）
+        _videoRt = new RenderTexture(1280, 720, 0);
+        _videoRt.Create();
+
+        // ワールド配置: ハイウェイ(z≈0)よりずっと奥(z=-60)に大きめのQuadを置く
         _bgQuad = GameObject.CreatePrimitive(PrimitiveType.Quad);
         _bgQuad.name = "BgVideoQuad";
         Destroy(_bgQuad.GetComponent<Collider>());
@@ -344,25 +347,27 @@ public class RhythmGameManager : MonoBehaviour
         if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", Color.white);
         if (mat.HasProperty("_Color"))     mat.SetColor("_Color", Color.white);
         string texProp = mat.HasProperty("_BaseMap") ? "_BaseMap" : "_MainTex";
-        var renderer = _bgQuad.GetComponent<Renderer>();
-        renderer.material = mat;
+        mat.SetTexture(texProp, _videoRt);
+        mat.mainTexture = _videoRt; // 保険：URP/Built-in両対応
+        _bgQuad.GetComponent<Renderer>().material = mat;
 
         string path = new Uri(Path.Combine(Application.streamingAssetsPath, "songs", videoFile)).AbsoluteUri;
         var go = new GameObject("BackgroundVideo");
         _videoPlayer = go.AddComponent<VideoPlayer>();
-        // RenderTexture経由ではなくMaterialOverrideで直接Quadのマテリアルへ書き込む
-        _videoPlayer.renderMode             = VideoRenderMode.MaterialOverride;
-        _videoPlayer.targetMaterialRenderer = renderer;
-        _videoPlayer.targetMaterialProperty = texProp;
-        _videoPlayer.isLooping              = true;
-        _videoPlayer.playOnAwake            = false;
-        _videoPlayer.url                    = path;
+        _videoPlayer.renderMode      = VideoRenderMode.RenderTexture;
+        _videoPlayer.targetTexture   = _videoRt;
+        _videoPlayer.isLooping       = true;
+        _videoPlayer.playOnAwake     = false;
+        _videoPlayer.url             = path;
+        // 重要: trueだと描画完了を待ってtimeが進まなくなるケースがある
+        _videoPlayer.waitForFirstFrame = false;
+        _videoPlayer.skipOnDrop      = true;
         _videoPlayer.audioOutputMode = videoHasAudio ? VideoAudioOutputMode.Direct : VideoAudioOutputMode.None;
         _videoPlayer.errorReceived    += (vp, msg) => Debug.LogWarning($"[PULSE] Video error: {msg}");
         _videoPlayer.prepareCompleted += vp => Debug.Log($"[PULSE] Video prepared OK  size={vp.width}x{vp.height}  framerate={vp.frameRate:F2}");
         _videoPlayer.Prepare();
 
-        Debug.Log($"[PULSE] BgQuad+MatOverride: shader='{shader?.name}' texProp={texProp} pos={_bgQuad.transform.position}");
+        Debug.Log($"[PULSE] BgQuad+RT: shader='{shader?.name}' texProp={texProp} rt={_videoRt.width}x{_videoRt.height}");
     }
 
     IEnumerator PlayVideoWhenReady()
