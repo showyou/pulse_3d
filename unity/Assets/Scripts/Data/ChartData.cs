@@ -62,6 +62,7 @@ public class FumenRoot
 {
     public string title;
     public string audioFile;
+    public string videoFile;
     public float totalDuration;
     public List<FumenNote> notes;
 }

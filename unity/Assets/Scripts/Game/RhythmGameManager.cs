@@ -188,6 +188,7 @@ public class RhythmGameManager : MonoBehaviour
             title     = fumen.title ?? "",
             duration  = (int)(fumen.totalDuration * 1000),
             audioFile = fumen.audioFile ?? "",
+            videoFile = fumen.videoFile ?? "",
         };
         chart.notes = new List<ChartNote>(fumen.notes.Count);
         foreach (var n in fumen.notes)
