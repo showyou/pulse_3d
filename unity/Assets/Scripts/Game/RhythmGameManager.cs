@@ -198,13 +198,8 @@ public class RhythmGameManager : MonoBehaviour
         string audioFile2  = _chart.meta?.audioFile ?? "";
         _videoHasAudio = !string.IsNullOrEmpty(videoFile) && string.IsNullOrEmpty(audioFile2);
         SetupBackgroundVideo(videoFile, _videoHasAudio);
-
-        // VideoPlayerのPrepare完了をロード中に待つ（ゲーム開始後に待つと同期が難しい）
-        if (_videoPlayer != null)
-        {
-            _statusMsg = "Loading video...";
-            yield return new WaitUntil(() => _videoPlayer.isPrepared);
-        }
+        // 動画音声ありの場合: ffmpegで音声を抽出してaudioFileとして用意することを推奨
+        // Direct/AudioSourceモードはUnity Editorでバッファ問題があるため
 
         _statusMsg = "";
         StartGame();
@@ -347,17 +342,8 @@ public class RhythmGameManager : MonoBehaviour
     IEnumerator PlayVideoWhenReady()
     {
         yield return new WaitUntil(() => _videoPlayer.isPrepared);
-        if (_videoHasAudio)
-        {
-            // 待機なしで即Play。MusicTime は VideoPlayer.time から取るので同期は自動
-            _videoPlayer.Play();
-        }
-        else
-        {
-            // 映像のみ: BGMの PlayScheduled に合わせる
-            yield return new WaitUntil(() => AudioSettings.dspTime >= _startDspTime);
-            _videoPlayer.Play();
-        }
+        yield return new WaitUntil(() => AudioSettings.dspTime >= _startDspTime);
+        _videoPlayer.Play();
     }
 
     // ---------------------------------------------------------------
@@ -381,10 +367,7 @@ public class RhythmGameManager : MonoBehaviour
         }
         if (_state != GameState.Playing || !_isPlaying || _chart == null) return;
 
-        // 動画音声ありの場合は VideoPlayer.time を正とする（バッファ遅延を除去）
-        MusicTime = _videoHasAudio && _videoPlayer != null && _videoPlayer.isPlaying
-            ? (float)_videoPlayer.time
-            : (float)(AudioSettings.dspTime - _startDspTime);
+        MusicTime = (float)(AudioSettings.dspTime - _startDspTime);
 
         SpawnDueNotes();
         if (autoPlay) AutoPlayUpdate();
