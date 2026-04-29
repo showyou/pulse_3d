@@ -193,10 +193,18 @@ public class RhythmGameManager : MonoBehaviour
             audioSource.clip = null;
         }
 
-        string videoFile  = _chart.meta?.videoFile  ?? "";
-        string audioFile2 = _chart.meta?.audioFile  ?? "";
+        string videoFile   = _chart.meta?.videoFile ?? "";
+        string audioFile2  = _chart.meta?.audioFile ?? "";
         bool videoHasAudio = !string.IsNullOrEmpty(videoFile) && string.IsNullOrEmpty(audioFile2);
         SetupBackgroundVideo(videoFile, videoHasAudio);
+
+        // VideoPlayerのPrepare完了をロード中に待つ（ゲーム開始後に待つと同期が難しい）
+        if (_videoPlayer != null)
+        {
+            _statusMsg = "Loading video...";
+            yield return new WaitUntil(() => _videoPlayer.isPrepared);
+        }
+
         _statusMsg = "";
         StartGame();
     }
@@ -337,16 +345,10 @@ public class RhythmGameManager : MonoBehaviour
 
     IEnumerator PlayVideoWhenReady()
     {
+        // Prepare はロード画面中に完了済みのはずだが念のため待つ
         yield return new WaitUntil(() => _videoPlayer.isPrepared);
-
-        double remaining = _startDspTime - AudioSettings.dspTime;
-        if (remaining > 0)
-            yield return new WaitForSeconds((float)remaining);
-
-        // Prepare に時間がかかって _startDspTime を過ぎた場合だけシーク補正
-        double lag = AudioSettings.dspTime - _startDspTime;
-        if (lag > 0.05) _videoPlayer.time = lag;
-
+        // _startDspTime まで待ってから再生（BGMと同じタイミング）
+        yield return new WaitUntil(() => AudioSettings.dspTime >= _startDspTime);
         _videoPlayer.Play();
     }
 
