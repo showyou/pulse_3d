@@ -35,6 +35,7 @@ public class RhythmGameManager : MonoBehaviour
     int   _perfect, _good, _miss;
     bool  _isPlaying;
     double _startDspTime;
+    bool  _videoHasAudio;
 
     ChartData _chart;
     int       _spawnIndex;
@@ -195,8 +196,8 @@ public class RhythmGameManager : MonoBehaviour
 
         string videoFile   = _chart.meta?.videoFile ?? "";
         string audioFile2  = _chart.meta?.audioFile ?? "";
-        bool videoHasAudio = !string.IsNullOrEmpty(videoFile) && string.IsNullOrEmpty(audioFile2);
-        SetupBackgroundVideo(videoFile, videoHasAudio);
+        _videoHasAudio = !string.IsNullOrEmpty(videoFile) && string.IsNullOrEmpty(audioFile2);
+        SetupBackgroundVideo(videoFile, _videoHasAudio);
 
         // VideoPlayerのPrepare完了をロード中に待つ（ゲーム開始後に待つと同期が難しい）
         if (_videoPlayer != null)
@@ -345,11 +346,18 @@ public class RhythmGameManager : MonoBehaviour
 
     IEnumerator PlayVideoWhenReady()
     {
-        // Prepare はロード画面中に完了済みのはずだが念のため待つ
         yield return new WaitUntil(() => _videoPlayer.isPrepared);
-        // _startDspTime まで待ってから再生（BGMと同じタイミング）
-        yield return new WaitUntil(() => AudioSettings.dspTime >= _startDspTime);
-        _videoPlayer.Play();
+        if (_videoHasAudio)
+        {
+            // 待機なしで即Play。MusicTime は VideoPlayer.time から取るので同期は自動
+            _videoPlayer.Play();
+        }
+        else
+        {
+            // 映像のみ: BGMの PlayScheduled に合わせる
+            yield return new WaitUntil(() => AudioSettings.dspTime >= _startDspTime);
+            _videoPlayer.Play();
+        }
     }
 
     // ---------------------------------------------------------------
@@ -373,7 +381,10 @@ public class RhythmGameManager : MonoBehaviour
         }
         if (_state != GameState.Playing || !_isPlaying || _chart == null) return;
 
-        MusicTime = (float)(AudioSettings.dspTime - _startDspTime);
+        // 動画音声ありの場合は VideoPlayer.time を正とする（バッファ遅延を除去）
+        MusicTime = _videoHasAudio && _videoPlayer != null && _videoPlayer.isPlaying
+            ? (float)_videoPlayer.time
+            : (float)(AudioSettings.dspTime - _startDspTime);
 
         SpawnDueNotes();
         if (autoPlay) AutoPlayUpdate();
