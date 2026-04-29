@@ -328,15 +328,9 @@ public class RhythmGameManager : MonoBehaviour
         _videoPlayer.playOnAwake  = false;
         _videoPlayer.url          = path;
 
-        if (videoHasAudio)
-        {
-            _videoPlayer.audioOutputMode = VideoAudioOutputMode.AudioSource;
-            _videoPlayer.SetTargetAudioSource(0, audioSource);
-        }
-        else
-        {
-            _videoPlayer.audioOutputMode = VideoAudioOutputMode.None;
-        }
+        _videoPlayer.audioOutputMode = videoHasAudio
+            ? VideoAudioOutputMode.Direct
+            : VideoAudioOutputMode.None;
 
         _videoPlayer.Prepare();
     }
