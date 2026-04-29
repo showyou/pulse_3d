@@ -346,7 +346,7 @@ public class RhythmGameManager : MonoBehaviour
         _videoPlayer.Prepare();
 
         Camera cam = Camera.main;
-        if (cam == null) return;
+        if (cam == null) { Debug.LogWarning("[PULSE] BgQuad: Camera.main is null"); return; }
 
         _bgQuad = GameObject.CreatePrimitive(PrimitiveType.Quad);
         _bgQuad.name = "BgVideoQuad";
@@ -354,22 +354,28 @@ public class RhythmGameManager : MonoBehaviour
         _bgQuad.transform.SetParent(cam.transform, false);
 
         // カメラのFOVと距離からちょうど画面を埋めるサイズを計算
-        const float dist = 100f;
+        const float dist = 80f;
+        float aspect = (float)Screen.width / Mathf.Max(1, Screen.height);
         float h = 2f * dist * Mathf.Tan(cam.fieldOfView * 0.5f * Mathf.Deg2Rad);
-        float w = h * cam.aspect;
+        float w = h * aspect;
         _bgQuad.transform.localPosition    = new Vector3(0f, 0f, dist);
-        // Y軸180°で法線をカメラ方向へ。X反転でテクスチャの鏡像を補正
+        // Y軸180°回転で法線をカメラ方向に向ける（負スケールは巻き順反転で裏面化するため使わない）
         _bgQuad.transform.localEulerAngles = new Vector3(0f, 180f, 0f);
-        _bgQuad.transform.localScale       = new Vector3(-w, h, 1f);
+        _bgQuad.transform.localScale       = new Vector3(w, h, 1f);
 
         var shader = Shader.Find("Universal Render Pipeline/Unlit")
-                  ?? Shader.Find("Unlit/Texture");
+                  ?? Shader.Find("Unlit/Texture")
+                  ?? Shader.Find("Sprites/Default");
         var mat = new Material(shader);
-        if (mat.HasProperty("_BaseMap"))
-            mat.SetTexture("_BaseMap", _videoRt);
-        else
-            mat.mainTexture = _videoRt;
+        if (mat.HasProperty("_Cull")) mat.SetFloat("_Cull", 0f); // 両面描画（保険）
+        string texProp = mat.HasProperty("_BaseMap") ? "_BaseMap" : "_MainTex";
+        mat.SetTexture(texProp, _videoRt);
+        // Y軸180°回転による左右反転をUV側で補正
+        mat.SetTextureScale(texProp,  new Vector2(-1f, 1f));
+        mat.SetTextureOffset(texProp, new Vector2( 1f, 0f));
         _bgQuad.GetComponent<Renderer>().material = mat;
+
+        Debug.Log($"[PULSE] BgQuad: shader='{shader?.name}' aspect={aspect:F2} fov={cam.fieldOfView:F1} w={w:F1} h={h:F1} texProp={texProp}");
     }
 
     IEnumerator PlayVideoWhenReady()
