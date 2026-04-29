@@ -232,13 +232,19 @@ public class RhythmGameManager : MonoBehaviour
         chart.notes = new List<ChartNote>(fumen.notes.Count);
         foreach (var n in fumen.notes)
         {
-            bool isLong    = n.duration > 0.05f;
+            // fumen の duration は音符の長さ（MIDI的）でありゲームのロングノーツとは別概念
+            // → fumen形式は全てタップとして扱う
             int  mappedLane = n.lane % GameConstants.NUM_LANES;
+            // デフォルト3レーン幅: 中心レーンの両隣を含む
+            int lo = Mathf.Max(0, mappedLane - 1);
+            int hi = Mathf.Min(GameConstants.NUM_LANES - 1, mappedLane + 1);
+            var laneArr = new int[hi - lo + 1];
+            for (int i = lo; i <= hi; i++) laneArr[i - lo] = i;
             chart.notes.Add(new ChartNote {
                 t      = (int)(n.time * 1000),
-                lanes  = new[] { mappedLane },
-                isLong = isLong,
-                holdMs = isLong ? (int)(n.duration * 1000) : 0,
+                lanes  = laneArr,
+                isLong = false,
+                holdMs = 0,
             });
         }
         Debug.Log($"[PULSE] Converted fumen.json '{fumen.title}' ({fumen.notes.Count} notes)");
