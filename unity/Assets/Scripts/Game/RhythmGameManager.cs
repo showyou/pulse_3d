@@ -134,22 +134,40 @@ public class RhythmGameManager : MonoBehaviour
         string audioFile = _chart.meta?.audioFile ?? "";
         if (!string.IsNullOrEmpty(audioFile))
         {
-            string audioPath = new Uri(Path.Combine(Application.streamingAssetsPath, "songs", audioFile)).AbsoluteUri;
-            _statusMsg = "Loading audio...";
-            var audioType = Path.GetExtension(audioFile).ToLower() switch {
-                ".ogg"  => AudioType.OGGVORBIS,
-                ".mp3"  => AudioType.MPEG,
-                ".wav"  => AudioType.WAV,
-                _       => AudioType.OGGVORBIS,
-            };
-            var handler = new DownloadHandlerAudioClip(audioPath, audioType);
-            handler.streamAudio = false;
-            using var req = new UnityWebRequest(audioPath) { downloadHandler = handler };
-            yield return req.SendWebRequest();
-            if (req.result == UnityWebRequest.Result.Success)
-                audioSource.clip = DownloadHandlerAudioClip.GetContent(req);
+            string localPath = Path.Combine(Application.streamingAssetsPath, "songs", audioFile);
+            bool exists = File.Exists(localPath);
+            long size = exists ? new FileInfo(localPath).Length : 0;
+            Debug.Log($"[PULSE] Audio path: {localPath}  exists={exists}  size={size}");
+            if (!exists)
+            {
+                Debug.LogWarning($"[PULSE] Audio file not found: {localPath}");
+            }
             else
-                Debug.LogWarning($"[PULSE] Audio load failed: {req.error}");
+            {
+                _statusMsg = "Loading audio...";
+                var audioType = Path.GetExtension(audioFile).ToLower() switch {
+                    ".ogg"  => AudioType.OGGVORBIS,
+                    ".mp3"  => AudioType.MPEG,
+                    ".wav"  => AudioType.WAV,
+                    _       => AudioType.OGGVORBIS,
+                };
+                string audioPath = new Uri(localPath).AbsoluteUri;
+                Debug.Log($"[PULSE] Audio URI: {audioPath}  type={audioType}");
+                using var req = UnityWebRequestMultimedia.GetAudioClip(audioPath, audioType);
+                ((DownloadHandlerAudioClip)req.downloadHandler).streamAudio = false;
+                yield return req.SendWebRequest();
+                Debug.Log($"[PULSE] Audio req result={req.result}  downloaded={req.downloadedBytes}  error={req.error}");
+                if (req.result == UnityWebRequest.Result.Success)
+                {
+                    var clip = DownloadHandlerAudioClip.GetContent(req);
+                    Debug.Log($"[PULSE] Clip loaded: name='{clip?.name}'  samples={clip?.samples}  channels={clip?.channels}  freq={clip?.frequency}  state={clip?.loadState}");
+                    audioSource.clip = clip;
+                }
+                else
+                {
+                    Debug.LogWarning($"[PULSE] Audio load failed: {req.error}");
+                }
+            }
         }
         else
         {
