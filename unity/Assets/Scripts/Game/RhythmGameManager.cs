@@ -323,7 +323,7 @@ public class RhythmGameManager : MonoBehaviour
         if (_videoPlayer != null) { Destroy(_videoPlayer.gameObject); _videoPlayer = null; }
         if (string.IsNullOrEmpty(videoFile)) return;
 
-        string path = "file://" + Path.Combine(Application.streamingAssetsPath, "songs", videoFile);
+        string path = new Uri(Path.Combine(Application.streamingAssetsPath, "songs", videoFile)).AbsoluteUri;
         var go = new GameObject("BackgroundVideo");
         _videoPlayer = go.AddComponent<VideoPlayer>();
         _videoPlayer.renderMode   = VideoRenderMode.CameraFarPlane;
