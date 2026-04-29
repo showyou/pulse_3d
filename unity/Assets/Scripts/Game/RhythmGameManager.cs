@@ -344,10 +344,15 @@ public class RhythmGameManager : MonoBehaviour
     IEnumerator PlayVideoWhenReady()
     {
         yield return new WaitUntil(() => _videoPlayer.isPrepared);
-        // BGM の PlayScheduled と同じタイミングまで待ってから再生
-        yield return new WaitUntil(() => AudioSettings.dspTime >= _startDspTime);
+
+        double remaining = _startDspTime - AudioSettings.dspTime;
+        if (remaining > 0)
+            yield return new WaitForSeconds((float)remaining);
+
+        // Prepare に時間がかかって _startDspTime を過ぎた場合だけシーク補正
         double lag = AudioSettings.dspTime - _startDspTime;
-        if (lag > 0.01) _videoPlayer.time = lag;
+        if (lag > 0.05) _videoPlayer.time = lag;
+
         _videoPlayer.Play();
     }
 
