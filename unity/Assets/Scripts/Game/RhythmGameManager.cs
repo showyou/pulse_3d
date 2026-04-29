@@ -345,37 +345,23 @@ public class RhythmGameManager : MonoBehaviour
         _videoPlayer.prepareCompleted += vp => Debug.Log("[PULSE] Video prepared OK");
         _videoPlayer.Prepare();
 
-        Camera cam = Camera.main;
-        if (cam == null) { Debug.LogWarning("[PULSE] BgQuad: Camera.main is null"); return; }
-
+        // ワールド空間配置: ハイウェイ(z≈0)よりずっと奥(z=-60)に大きめのQuadを置く
         _bgQuad = GameObject.CreatePrimitive(PrimitiveType.Quad);
         _bgQuad.name = "BgVideoQuad";
         Destroy(_bgQuad.GetComponent<Collider>());
-        _bgQuad.transform.SetParent(cam.transform, false);
-
-        // カメラのFOVと距離からちょうど画面を埋めるサイズを計算
-        const float dist = 80f;
-        float aspect = (float)Screen.width / Mathf.Max(1, Screen.height);
-        float h = 2f * dist * Mathf.Tan(cam.fieldOfView * 0.5f * Mathf.Deg2Rad);
-        float w = h * aspect;
-        _bgQuad.transform.localPosition    = new Vector3(0f, 0f, dist);
-        // Y軸180°回転で法線をカメラ方向に向ける（負スケールは巻き順反転で裏面化するため使わない）
-        _bgQuad.transform.localEulerAngles = new Vector3(0f, 180f, 0f);
-        _bgQuad.transform.localScale       = new Vector3(w, h, 1f);
+        _bgQuad.transform.position   = new Vector3(0f, 0f, -60f);
+        _bgQuad.transform.rotation   = Quaternion.identity; // 法線+Z → カメラ(z=9)を向く
+        _bgQuad.transform.localScale = new Vector3(160f, 90f, 1f);
 
         var shader = Shader.Find("Universal Render Pipeline/Unlit")
                   ?? Shader.Find("Unlit/Texture")
                   ?? Shader.Find("Sprites/Default");
         var mat = new Material(shader);
-        if (mat.HasProperty("_Cull")) mat.SetFloat("_Cull", 0f); // 両面描画（保険）
         string texProp = mat.HasProperty("_BaseMap") ? "_BaseMap" : "_MainTex";
         mat.SetTexture(texProp, _videoRt);
-        // Y軸180°回転による左右反転をUV側で補正
-        mat.SetTextureScale(texProp,  new Vector2(-1f, 1f));
-        mat.SetTextureOffset(texProp, new Vector2( 1f, 0f));
         _bgQuad.GetComponent<Renderer>().material = mat;
 
-        Debug.Log($"[PULSE] BgQuad: shader='{shader?.name}' aspect={aspect:F2} fov={cam.fieldOfView:F1} w={w:F1} h={h:F1} texProp={texProp}");
+        Debug.Log($"[PULSE] BgQuad world: shader='{shader?.name}' pos={_bgQuad.transform.position} scale={_bgQuad.transform.localScale} texProp={texProp} rt={_videoRt.width}x{_videoRt.height}");
     }
 
     IEnumerator PlayVideoWhenReady()
@@ -383,6 +369,7 @@ public class RhythmGameManager : MonoBehaviour
         yield return new WaitUntil(() => _videoPlayer.isPrepared);
         yield return new WaitUntil(() => AudioSettings.dspTime >= _startDspTime);
         _videoPlayer.Play();
+        Debug.Log($"[PULSE] PlayVideoWhenReady: Play() called dspTime={AudioSettings.dspTime:F2}");
     }
 
     // ---------------------------------------------------------------
