@@ -20,6 +20,26 @@ public class HighwayBuilder : MonoBehaviour
                        ?? Shader.Find("Universal Render Pipeline/Unlit")
                        ?? Shader.Find("Standard"));
 
+    static Material MakeTransparentMat(Color color)
+    {
+        var shader = Shader.Find("Universal Render Pipeline/Unlit")
+                  ?? Shader.Find("Sprites/Default")
+                  ?? Shader.Find("Standard");
+        var mat = new Material(shader);
+        if (mat.HasProperty("_Surface"))
+        {
+            mat.SetFloat("_Surface", 1f);
+            mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        }
+        mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+        mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+        mat.SetInt("_ZWrite", 0);
+        mat.SetOverrideTag("RenderType", "Transparent");
+        mat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+        ApplyColor(mat, color);
+        return mat;
+    }
+
     Light[] _hitLights;
     Material[] _laneMats; // レーングロー用、インスタンス保持
     readonly bool[] _glowActive = new bool[6]; // キー押下中フラグ（Flash後の intensity 復元用）
@@ -42,7 +62,7 @@ public class HighwayBuilder : MonoBehaviour
         float w   = (GameConstants.NUM_LANES + 1) * GameConstants.LANE_SPACING;
         go.transform.localScale = new Vector3(w, 0.01f, len);
         go.transform.position   = new Vector3(0f, -0.01f, MidZ());
-        SetColor(go, new Color(0.04f, 0.04f, 0.09f));
+        go.GetComponent<Renderer>().sharedMaterial = MakeTransparentMat(new Color(0.04f, 0.04f, 0.09f, 0.55f));
     }
 
     void BuildLaneStrips()
@@ -55,8 +75,7 @@ public class HighwayBuilder : MonoBehaviour
             go.transform.localScale = new Vector3(GameConstants.LANE_SPACING * 0.96f, 0.005f, len);
             go.transform.position   = new Vector3(LaneX(lane), 0f, MidZ());
             Color c = GroupColors[lane / 2];
-            var mat = new Material(UnlitShader);
-            ApplyColor(mat, DimColor(c));
+            var mat = MakeTransparentMat(DimColor(c));
             go.GetComponent<Renderer>().sharedMaterial = mat;
             _laneMats[lane] = mat;
         }
@@ -72,7 +91,8 @@ public class HighwayBuilder : MonoBehaviour
             go.transform.localScale = new Vector3(0.025f, 0.008f, len);
             go.transform.position   = new Vector3(x, 0.003f, MidZ());
             bool major = (i % 2 == 0);
-            SetColor(go, major ? new Color(0.5f, 0.75f, 1f) : new Color(0.2f, 0.3f, 0.5f));
+            go.GetComponent<Renderer>().sharedMaterial = MakeTransparentMat(
+                major ? new Color(0.5f, 0.75f, 1f, 0.5f) : new Color(0.2f, 0.3f, 0.5f, 0.4f));
         }
     }
 
@@ -95,7 +115,7 @@ public class HighwayBuilder : MonoBehaviour
             var go = Cube("Border");
             go.transform.localScale = new Vector3(0.12f, 0.25f, len);
             go.transform.position   = new Vector3(side, 0.12f, MidZ());
-            SetColor(go, new Color(0.4f, 0.6f, 1f));
+            go.GetComponent<Renderer>().sharedMaterial = MakeTransparentMat(new Color(0.4f, 0.6f, 1f, 0.5f));
         }
     }
 
@@ -152,8 +172,8 @@ public class HighwayBuilder : MonoBehaviour
     }
 
     // ---------------------------------------------------------------
-    static Color DimColor(Color c)    => new Color(c.r * 0.18f, c.g * 0.18f, c.b * 0.18f);
-    static Color BrightColor(Color c) => new Color(c.r * 0.70f, c.g * 0.70f, c.b * 0.70f);
+    static Color DimColor(Color c)    => new Color(c.r * 0.18f, c.g * 0.18f, c.b * 0.18f, 0.45f);
+    static Color BrightColor(Color c) => new Color(c.r * 0.70f, c.g * 0.70f, c.b * 0.70f, 0.70f);
 
     // Three.jsと座標系の左右を合わせるため符号を反転
     static float LaneX(int lane) => (5.5f - lane) * GameConstants.LANE_SPACING;

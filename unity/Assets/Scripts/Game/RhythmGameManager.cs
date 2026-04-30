@@ -332,14 +332,11 @@ public class RhythmGameManager : MonoBehaviour
         _videoRt = new RenderTexture(1280, 720, 0);
         _videoRt.Create();
 
-        // ワールド配置: ハイウェイ(z≈0)よりずっと奥(z=-60)に大きめのQuadを置く
         _bgQuad = GameObject.CreatePrimitive(PrimitiveType.Quad);
         _bgQuad.name = "BgVideoQuad";
         Destroy(_bgQuad.GetComponent<Collider>());
-        _bgQuad.transform.position   = new Vector3(0f, 0f, -60f);
-        // PrimitiveType.Quad の法線は -Z（=カメラから遠ざかる側）。Cull Off で両面描画にしてカメラから見えるようにする。
-        _bgQuad.transform.rotation   = Quaternion.Euler(0f, 180f, 0f);
         _bgQuad.transform.localScale = new Vector3(160f, 90f, 1f);
+        UpdateBillboard(); // 初期位置・向きをカメラに合わせる
 
         var shader = Shader.Find("Universal Render Pipeline/Unlit")
                   ?? Shader.Find("Unlit/Texture")
@@ -710,6 +707,16 @@ public class RhythmGameManager : MonoBehaviour
             Mathf.Sin(t * 0.7f) * 0.03f,
             5.5f + Mathf.Sin(t * 1.1f) * 0.02f, 9f);
         cam.transform.LookAt(new Vector3(0f, 0f, -8f));
+        UpdateBillboard();
+    }
+
+    void UpdateBillboard()
+    {
+        if (_bgQuad == null) return;
+        Camera cam = Camera.main;
+        if (cam == null) return;
+        _bgQuad.transform.position = cam.transform.position + cam.transform.forward * 50f;
+        _bgQuad.transform.rotation = Quaternion.LookRotation(-cam.transform.forward, cam.transform.up);
     }
 
     // ---------------------------------------------------------------
