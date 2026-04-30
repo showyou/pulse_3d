@@ -338,7 +338,13 @@ public class RhythmGameManager : MonoBehaviour
         Destroy(_bgQuad.GetComponent<Collider>());
         _bgQuad.transform.position   = new Vector3(0f, 0f, -60f);
         // PrimitiveType.Quad の法線は -Z（=カメラから遠ざかる側）。Cull Off で両面描画にしてカメラから見えるようにする。
-        _bgQuad.transform.rotation   = Quaternion.identity;
+        // Quad をカメラに正面向けにする（傾きの原因となる Z 軸回転を消除）。
+        Camera mainCam = Camera.main;
+        if (mainCam != null)
+        {
+            Vector3 dir = _bgQuad.transform.position - mainCam.transform.position;
+            _bgQuad.transform.rotation = Quaternion.LookRotation(dir);
+        }
         _bgQuad.transform.localScale = new Vector3(160f, 90f, 1f);
 
         var shader = Shader.Find("Universal Render Pipeline/Unlit")
@@ -376,24 +382,15 @@ public class RhythmGameManager : MonoBehaviour
         _videoPlayer.playbackSpeed   = 1.0f;
         // デフォルトのAudioDSPTimeSourceで詰まる事例があるためゲーム時間に固定
         _videoPlayer.timeUpdateMode  = VideoTimeUpdateMode.GameTime;
-        // 動画内の音声トラックの扱い:
-        //  - 別ファイルから音声を流す場合(videoHasAudio=false)はトラック自体を無視
-        //  - そうでないと内部デコーダがバッファあふれを起こしてクロックがスタックする
-        if (videoHasAudio)
-        {
-            _videoPlayer.audioOutputMode = VideoAudioOutputMode.Direct;
-        }
-        else
-        {
-            // AudioSource経由でUnityオーディオシステムに乗せてmute。
-            // audioOutputMode=None や EnableAudioTrack は macOS AVFoundation を完全にバイパスできない。
-            _videoPlayer.controlledAudioTrackCount = 1;
-            _videoPlayer.audioOutputMode = VideoAudioOutputMode.AudioSource;
-            var silentSrc = go.AddComponent<AudioSource>();
-            silentSrc.playOnAwake = false;
-            silentSrc.mute        = true;
-            _videoPlayer.SetTargetAudioSource(0, silentSrc);
-        }
+        // 動画内の音声トラックは常にミュート（外部ファイルから音声を再生するため）。
+        // macOS AVFoundation は audioOutputMode=None や EnableAudioTrack を無視して
+        // 動画内の音声トラックを再生するため、AudioSource経由にミュートして完全に制御する。
+        _videoPlayer.controlledAudioTrackCount = 1;
+        _videoPlayer.audioOutputMode = VideoAudioOutputMode.AudioSource;
+        var silentSrc = go.AddComponent<AudioSource>();
+        silentSrc.playOnAwake = false;
+        silentSrc.mute        = true;
+        _videoPlayer.SetTargetAudioSource(0, silentSrc);
         _videoPlayer.errorReceived    += (vp, msg) => Debug.LogWarning($"[PULSE] Video error: {msg}");
         _videoPlayer.prepareCompleted += vp =>
             Debug.Log($"[PULSE] Video prepared OK  size={vp.width}x{vp.height}  framerate={vp.frameRate:F2}  audioTracks={vp.audioTrackCount}");
