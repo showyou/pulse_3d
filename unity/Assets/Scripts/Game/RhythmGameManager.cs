@@ -349,10 +349,12 @@ public class RhythmGameManager : MonoBehaviour
         string texProp = mat.HasProperty("_BaseMap") ? "_BaseMap" : "_MainTex";
         mat.SetTexture(texProp, _videoRt);
         mat.mainTexture = _videoRt; // 保険：URP/Built-in両対応
-        // Backgroundキューで最初に描画 + ZWrite Off → HighwayFloorに隠されない背景として機能
+        // ZTest Always + ZWrite Off + Backgroundキュー → 深度に関係なく必ず背景として描画される
         mat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Background;
-        if (mat.HasProperty("_ZWrite")) mat.SetFloat("_ZWrite", 0f);
+        mat.SetFloat("_ZTest",  (float)UnityEngine.Rendering.CompareFunction.Always);
+        mat.SetFloat("_ZWrite", 0f);
         _bgQuad.GetComponent<Renderer>().material = mat;
+        Debug.Log($"[PULSE] BgQuad mat: queue={mat.renderQueue} ZTest={mat.GetFloat("_ZTest")} ZWrite={mat.GetFloat("_ZWrite")}");
 
         Application.runInBackground = true; // Editor非フォーカスでも更新を続ける
 
@@ -380,17 +382,18 @@ public class RhythmGameManager : MonoBehaviour
         }
         else
         {
-            _videoPlayer.controlledAudioTrackCount = 0;
-            _videoPlayer.audioOutputMode = VideoAudioOutputMode.None;
+            // AudioSource経由でUnityオーディオシステムに乗せてmute。
+            // audioOutputMode=None や EnableAudioTrack は macOS AVFoundation を完全にバイパスできない。
+            _videoPlayer.controlledAudioTrackCount = 1;
+            _videoPlayer.audioOutputMode = VideoAudioOutputMode.AudioSource;
+            var silentSrc = go.AddComponent<AudioSource>();
+            silentSrc.playOnAwake = false;
+            silentSrc.mute        = true;
+            _videoPlayer.SetTargetAudioSource(0, silentSrc);
         }
         _videoPlayer.errorReceived    += (vp, msg) => Debug.LogWarning($"[PULSE] Video error: {msg}");
-        _videoPlayer.prepareCompleted += vp => {
-            // macOS AVFoundation はaudioOutputMode=Noneを無視して音を出すことがあるため明示無効化
-            if (!videoHasAudio)
-                for (ushort i = 0; i < (ushort)vp.audioTrackCount; i++)
-                    vp.EnableAudioTrack(i, false);
+        _videoPlayer.prepareCompleted += vp =>
             Debug.Log($"[PULSE] Video prepared OK  size={vp.width}x{vp.height}  framerate={vp.frameRate:F2}  audioTracks={vp.audioTrackCount}");
-        };
         // フレームデコードが進んでるかを最初の数枚だけ確認
         _videoPlayer.sendFrameReadyEvents = true;
         _videoPlayer.frameReady += (vp, idx) => { if (idx < 5) Debug.Log($"[PULSE] Frame ready: {idx}"); };
