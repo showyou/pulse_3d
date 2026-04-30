@@ -338,7 +338,7 @@ public class RhythmGameManager : MonoBehaviour
         Destroy(_bgQuad.GetComponent<Collider>());
         _bgQuad.transform.position   = new Vector3(0f, 0f, -60f);
         // PrimitiveType.Quad の法線は -Z（=カメラから遠ざかる側）。Cull Off で両面描画にしてカメラから見えるようにする。
-        _bgQuad.transform.rotation   = Quaternion.identity;
+        _bgQuad.transform.rotation   = Quaternion.Euler(0f, 180f, 0f);
         _bgQuad.transform.localScale = new Vector3(160f, 90f, 1f);
 
         var shader = Shader.Find("Universal Render Pipeline/Unlit")
