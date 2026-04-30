@@ -392,6 +392,7 @@ public class RhythmGameManager : MonoBehaviour
             var silentSrc = go.AddComponent<AudioSource>();
             silentSrc.playOnAwake = false;
             silentSrc.mute        = true;
+            silentSrc.volume      = 0f;
             _videoPlayer.SetTargetAudioSource(0, silentSrc);
         }
         _videoPlayer.errorReceived    += (vp, msg) => Debug.LogWarning($"[PULSE] Video error: {msg}");
