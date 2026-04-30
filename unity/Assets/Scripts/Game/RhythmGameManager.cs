@@ -338,12 +338,13 @@ public class RhythmGameManager : MonoBehaviour
         Destroy(_bgQuad.GetComponent<Collider>());
         _bgQuad.transform.position   = new Vector3(0f, 0f, -60f);
         // PrimitiveType.Quad の法線は -Z（=カメラから遠ざかる側）。Cull Off で両面描画にしてカメラから見えるようにする。
-        // Quad をカメラに正面向けにする（傾きの原因となる Z 軸回転を消除）。
+        // カメラの水平回転（Y）に合わせつつ Z roll を 0 にして水平を維持。
         Camera mainCam = Camera.main;
         if (mainCam != null)
         {
-            Vector3 dir = _bgQuad.transform.position - mainCam.transform.position;
-            _bgQuad.transform.rotation = Quaternion.LookRotation(dir);
+            Vector3 dir = mainCam.transform.forward;
+            dir.y = 0f; // 水平方向のみ
+            _bgQuad.transform.rotation = Quaternion.LookRotation(-dir);
         }
         _bgQuad.transform.localScale = new Vector3(160f, 90f, 1f);
 
