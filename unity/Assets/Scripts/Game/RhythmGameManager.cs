@@ -335,7 +335,7 @@ public class RhythmGameManager : MonoBehaviour
         _bgQuad = GameObject.CreatePrimitive(PrimitiveType.Quad);
         _bgQuad.name = "BgVideoQuad";
         Destroy(_bgQuad.GetComponent<Collider>());
-        _bgQuad.transform.localScale = new Vector3(160f, 90f, 1f);
+        _bgQuad.transform.localScale = new Vector3(-160f, 90f, 1f); // X負でビルボード時のUV反転を補正
         UpdateBillboard(); // 初期位置・向きをカメラに合わせる
 
         var shader = Shader.Find("Universal Render Pipeline/Unlit")
