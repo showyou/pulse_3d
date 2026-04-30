@@ -372,7 +372,7 @@ public class RhythmGameManager : MonoBehaviour
         _videoPlayer.skipOnDrop      = true;
         _videoPlayer.playbackSpeed   = 1.0f;
         // デフォルトのAudioDSPTimeSourceで詰まる事例があるためゲーム時間に固定
-        _videoPlayer.timeSource      = VideoTimeSource.GameTimeSource;
+        _videoPlayer.timeUpdateMode  = VideoTimeUpdateMode.GameTime;
         // 動画内の音声トラックの扱い:
         //  - 別ファイルから音声を流す場合(videoHasAudio=false)はトラック自体を無視
         //  - そうでないと内部デコーダがバッファあふれを起こしてクロックがスタックする
