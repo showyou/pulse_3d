@@ -337,7 +337,8 @@ public class RhythmGameManager : MonoBehaviour
         _bgQuad.name = "BgVideoQuad";
         Destroy(_bgQuad.GetComponent<Collider>());
         _bgQuad.transform.position   = new Vector3(0f, 0f, -60f);
-        _bgQuad.transform.rotation   = Quaternion.identity; // 法線+Z → カメラ(z=9)を向く
+        // PrimitiveType.Quad の法線は -Z（=カメラから遠ざかる側）。Cull Off で両面描画にしてカメラから見えるようにする。
+        _bgQuad.transform.rotation   = Quaternion.identity;
         _bgQuad.transform.localScale = new Vector3(160f, 90f, 1f);
 
         var shader = Shader.Find("Universal Render Pipeline/Unlit")
@@ -349,12 +350,14 @@ public class RhythmGameManager : MonoBehaviour
         string texProp = mat.HasProperty("_BaseMap") ? "_BaseMap" : "_MainTex";
         mat.SetTexture(texProp, _videoRt);
         mat.mainTexture = _videoRt; // 保険：URP/Built-in両対応
+        // Cull Off → Quadの法線が-ZでもCull Backで消えないようにする（これが本命）
         // ZTest Always + ZWrite Off + Backgroundキュー → 深度に関係なく必ず背景として描画される
+        mat.SetFloat("_Cull",   (float)UnityEngine.Rendering.CullMode.Off);
         mat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Background;
         mat.SetFloat("_ZTest",  (float)UnityEngine.Rendering.CompareFunction.Always);
         mat.SetFloat("_ZWrite", 0f);
         _bgQuad.GetComponent<Renderer>().material = mat;
-        Debug.Log($"[PULSE] BgQuad mat: queue={mat.renderQueue} ZTest={mat.GetFloat("_ZTest")} ZWrite={mat.GetFloat("_ZWrite")}");
+        Debug.Log($"[PULSE] BgQuad mat: queue={mat.renderQueue} Cull={mat.GetFloat("_Cull")} ZTest={mat.GetFloat("_ZTest")} ZWrite={mat.GetFloat("_ZWrite")}");
 
         Application.runInBackground = true; // Editor非フォーカスでも更新を続ける
 
