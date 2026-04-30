@@ -349,6 +349,9 @@ public class RhythmGameManager : MonoBehaviour
         string texProp = mat.HasProperty("_BaseMap") ? "_BaseMap" : "_MainTex";
         mat.SetTexture(texProp, _videoRt);
         mat.mainTexture = _videoRt; // 保険：URP/Built-in両対応
+        // Backgroundキューで最初に描画 + ZWrite Off → HighwayFloorに隠されない背景として機能
+        mat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Background;
+        if (mat.HasProperty("_ZWrite")) mat.SetFloat("_ZWrite", 0f);
         _bgQuad.GetComponent<Renderer>().material = mat;
 
         Application.runInBackground = true; // Editor非フォーカスでも更新を続ける
@@ -381,7 +384,13 @@ public class RhythmGameManager : MonoBehaviour
             _videoPlayer.audioOutputMode = VideoAudioOutputMode.None;
         }
         _videoPlayer.errorReceived    += (vp, msg) => Debug.LogWarning($"[PULSE] Video error: {msg}");
-        _videoPlayer.prepareCompleted += vp => Debug.Log($"[PULSE] Video prepared OK  size={vp.width}x{vp.height}  framerate={vp.frameRate:F2}");
+        _videoPlayer.prepareCompleted += vp => {
+            // macOS AVFoundation はaudioOutputMode=Noneを無視して音を出すことがあるため明示無効化
+            if (!videoHasAudio)
+                for (ushort i = 0; i < (ushort)vp.audioTrackCount; i++)
+                    vp.EnableAudioTrack(i, false);
+            Debug.Log($"[PULSE] Video prepared OK  size={vp.width}x{vp.height}  framerate={vp.frameRate:F2}  audioTracks={vp.audioTrackCount}");
+        };
         // フレームデコードが進んでるかを最初の数枚だけ確認
         _videoPlayer.sendFrameReadyEvents = true;
         _videoPlayer.frameReady += (vp, idx) => { if (idx < 5) Debug.Log($"[PULSE] Frame ready: {idx}"); };
