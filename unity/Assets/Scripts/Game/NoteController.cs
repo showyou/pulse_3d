@@ -155,6 +155,22 @@ public class NoteController : MonoBehaviour
 
         if (!IsHit && now > HitTimeSeconds + GameConstants.HIT_WINDOW_GOOD)
         {
+            // ロングノーツはボディ期間中はヘッドをヒットラインに固定して遅れ押し可能
+            if (IsLong && HoldDuration > 0f && now < HitTimeSeconds + HoldDuration)
+            {
+                transform.position = new Vector3(transform.position.x, 0.06f, GameConstants.NOTE_Z_HIT);
+                if (_holdBody != null)
+                {
+                    float rem  = HitTimeSeconds + HoldDuration - now;
+                    float blen = Mathf.Max(0.01f, rem * GameConstants.NOTE_SPEED);
+                    _holdBody.transform.localScale = new Vector3(
+                        _holdBody.transform.localScale.x,
+                        _holdBody.transform.localScale.y, blen);
+                    _holdBody.transform.position = new Vector3(
+                        transform.position.x, 0.03f, GameConstants.NOTE_Z_HIT - blen * 0.5f);
+                }
+                return;
+            }
             IsMissed = true;
             _manager.OnNoteMissed(this);
             Finish();

@@ -713,7 +713,10 @@ public class RhythmGameManager : MonoBehaviour
         {
             if (note.IsHit || note.IsMissed || note.IsHeld) continue;
             float err = Mathf.Abs(MusicTime - note.HitTimeSeconds);
-            if (err <= GameConstants.HIT_WINDOW_GOOD && err < bestErr)
+            bool hittable = err <= GameConstants.HIT_WINDOW_GOOD
+                || (note.IsLong && MusicTime > note.HitTimeSeconds
+                    && MusicTime < note.HitTimeSeconds + note.HoldDuration);
+            if (hittable && err < bestErr)
             { bestErr = err; best = note; }
         }
         return best;
