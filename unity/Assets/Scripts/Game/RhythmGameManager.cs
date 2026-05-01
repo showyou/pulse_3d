@@ -504,18 +504,17 @@ public class RhythmGameManager : MonoBehaviour
     static AudioClip GenerateHitClip()
     {
         const int sampleRate = 44100;
-        int len = (int)(sampleRate * 0.045f);
+        int len = (int)(sampleRate * 0.07f);
         var clip = AudioClip.Create("HitSE", len, 1, sampleRate, false);
         var data = new float[len];
+        var rng  = new System.Random(7);
         for (int i = 0; i < len; i++)
         {
-            float t   = (float)i / sampleRate;
-            float env = Mathf.Exp(-t * 60f); // 金属的な急速減衰
-            // 基音3800Hz + 倍音で「カン」
-            float wave = Mathf.Sin(2f * Mathf.PI * 3800f * t) * 0.55f
-                       + Mathf.Sin(2f * Mathf.PI * 6200f * t) * 0.30f
-                       + Mathf.Sin(2f * Mathf.PI * 9100f * t) * 0.15f;
-            data[i] = wave * env * 0.65f;
+            float t    = (float)i / sampleRate;
+            float env  = Mathf.Exp(-t * 28f);
+            float noise = (float)(rng.NextDouble() * 2.0 - 1.0); // スネアのザラつき
+            float tone  = Mathf.Sin(2f * Mathf.PI * 180f * t);   // ボディの低音
+            data[i] = (noise * 0.65f + tone * 0.35f) * env * 0.7f;
         }
         clip.SetData(data, 0);
         return clip;
@@ -769,7 +768,7 @@ public class RhythmGameManager : MonoBehaviour
         float t = Time.time;
         cam.transform.position = new Vector3(
             Mathf.Sin(t * 0.7f) * 0.03f,
-            5.5f + Mathf.Sin(t * 1.1f) * 0.02f, 9f);
+            8.0f + Mathf.Sin(t * 1.1f) * 0.02f, 9f);
         cam.transform.LookAt(new Vector3(0f, 0f, -8f));
         UpdateBillboard();
     }
@@ -1111,7 +1110,7 @@ public class RhythmGameManager : MonoBehaviour
         cam.fieldOfView   = 65f;
         cam.nearClipPlane = 0.3f;
         cam.farClipPlane  = 150f;
-        cam.transform.position = new Vector3(0f, 5.5f, 9f);
+        cam.transform.position = new Vector3(0f, 8.0f, 9f);
         cam.transform.LookAt(new Vector3(0f, 0f, -8f));
         RenderSettings.fog        = true;
         RenderSettings.fogMode    = FogMode.Exponential;
