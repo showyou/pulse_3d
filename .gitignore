@@ -3,8 +3,12 @@
 __pycache__/
 *.pyc
 
+# Local song library (machine-specific)
+unity/Assets/StreamingAssets/songs/metadata.json
+
 # Fumen data (copyright unclear)
 fumen.json
 fumen_min.json
 starmine_fumen.json
 files.zip
+run_local_llm.sh

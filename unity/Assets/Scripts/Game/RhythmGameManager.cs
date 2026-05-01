@@ -19,6 +19,9 @@ public class RhythmGameManager : MonoBehaviour
     [Header("Autoplay")]
     public bool autoPlay = false;
 
+    [Header("Debug")]
+    public float debugStartTime = 0f;  // 0以外にすると指定秒から再生開始
+
     [Header("Camera")]
     public float camFov     = 65f;
     public float camY       = 5.5f;
@@ -41,6 +44,7 @@ public class RhythmGameManager : MonoBehaviour
     bool  _isPlaying;
     double _startDspTime;
     bool  _videoHasAudio;
+    float _musicTimeOffset;
 
     ChartData _chart;
     int       _spawnIndex;
@@ -294,13 +298,25 @@ public class RhythmGameManager : MonoBehaviour
         for (int g = 0; g < 6; g++) { _holdNote[g] = null; _keyHeld[g] = false; _holdTick[g] = 0f; _slideNote[g] = null; _slideSince[g] = 0f; }
 
         _score = _combo = _maxCombo = _perfect = _good = _miss = 0;
-        _spawnIndex    = 0;
-        _judgmentText  = "";
-        _judgmentTimer = 0f;
+        _spawnIndex       = 0;
+        _judgmentText     = "";
+        _judgmentTimer    = 0f;
+        _musicTimeOffset  = Mathf.Max(0f, debugStartTime);
 
-        _startDspTime = AudioSettings.dspTime + 1.0;
+        // デバッグ開始秒数が指定されている場合はその時点から再生
+        double countdown = _musicTimeOffset > 0f ? 0.3 : 1.0;
+        _startDspTime = AudioSettings.dspTime + countdown;
         if (audioSource.clip != null)
+        {
+            if (_musicTimeOffset > 0f)
+                audioSource.time = Mathf.Clamp(_musicTimeOffset, 0f, audioSource.clip.length - 0.01f);
             audioSource.PlayScheduled(_startDspTime);
+        }
+
+        // 既に通過済みのノーツをスキップ
+        while (_spawnIndex < _chart.notes.Count &&
+               _chart.notes[_spawnIndex].t / 1000f + GameConstants.HIT_WINDOW_GOOD < _musicTimeOffset)
+            _spawnIndex++;
 
         _isPlaying = true;
         _state     = GameState.Playing;
@@ -420,9 +436,11 @@ public class RhythmGameManager : MonoBehaviour
     IEnumerator PlayVideoWhenReady()
     {
         yield return new WaitUntil(() => _videoPlayer.isPrepared);
+        if (_musicTimeOffset > 0f)
+            _videoPlayer.time = _musicTimeOffset;
         yield return new WaitUntil(() => AudioSettings.dspTime >= _startDspTime);
         _videoPlayer.Play();
-        Debug.Log($"[PULSE] PlayVideoWhenReady: Play() called dspTime={AudioSettings.dspTime:F2}");
+        Debug.Log($"[PULSE] PlayVideoWhenReady: Play() called dspTime={AudioSettings.dspTime:F2} offset={_musicTimeOffset:F1}");
     }
 
     // ---------------------------------------------------------------
@@ -446,7 +464,7 @@ public class RhythmGameManager : MonoBehaviour
         }
         if (_state != GameState.Playing || !_isPlaying || _chart == null) return;
 
-        MusicTime = (float)(AudioSettings.dspTime - _startDspTime);
+        MusicTime = (float)(AudioSettings.dspTime - _startDspTime) + _musicTimeOffset;
 
         // 動画再生のヘルスチェック（最初の数秒だけ間引いて出力）
         if (_videoPlayer != null && MusicTime > 0f && MusicTime < 5f && Time.frameCount % 30 == 0)
@@ -455,6 +473,7 @@ public class RhythmGameManager : MonoBehaviour
         SpawnDueNotes();
         if (autoPlay) AutoPlayUpdate();
         CheckHeldKeysForLongNotes();
+        CheckHeldNotes();
         UpdateHoldTicks();
         UpdateJudgmentDisplay();
         UpdateCameraBob();
@@ -497,7 +516,7 @@ public class RhythmGameManager : MonoBehaviour
             Destroy(go.GetComponent<Collider>());
             ctrl = go.AddComponent<NoteController>();
         }
-        ctrl.Init(n.t / 1000f, n.lanes, n.isLong, n.holdMs / 1000f, this, ReturnNote, n.slideEndGroup);
+        ctrl.Init(n.t / 1000f, n.lanes, n.isLong, n.holdMs / 1000f, this, ReturnNote, n.slideEndGroup, n.isHeld);
         foreach (int lane in n.lanes)
             _laneNotes[lane].Add(ctrl);
     }
@@ -710,12 +729,45 @@ public class RhythmGameManager : MonoBehaviour
         float bestErr = float.MaxValue;
         foreach (var note in Candidates(laneA, laneB))
         {
-            if (note.IsHit || note.IsMissed) continue;
+            if (note.IsHit || note.IsMissed || note.IsHeld) continue;
+            float err = Mathf.Abs(MusicTime - note.HitTimeSeconds);
+            bool hittable = err <= GameConstants.HIT_WINDOW_GOOD
+                || (note.IsLong && MusicTime > note.HitTimeSeconds
+                    && MusicTime < note.HitTimeSeconds + note.HoldDuration);
+            if (hittable && err < bestErr)
+            { bestErr = err; best = note; }
+        }
+        return best;
+    }
+
+    NoteController FindBestHeldNote(int laneA, int laneB)
+    {
+        NoteController best = null;
+        float bestErr = float.MaxValue;
+        foreach (var note in Candidates(laneA, laneB))
+        {
+            if (!note.IsHeld || note.IsHit || note.IsMissed) continue;
             float err = Mathf.Abs(MusicTime - note.HitTimeSeconds);
             if (err <= GameConstants.HIT_WINDOW_GOOD && err < bestErr)
             { bestErr = err; best = note; }
         }
         return best;
+    }
+
+    void CheckHeldNotes()
+    {
+        for (int g = 0; g < 6; g++)
+        {
+            if (!_keyHeld[g]) continue;
+            var note = FindBestHeldNote(GameConstants.KEY_LANES[g, 0], GameConstants.KEY_LANES[g, 1]);
+            if (note == null) continue;
+            RegisterJudgment(Judgment.Perfect);
+            SpawnHitEffect(note, Judgment.Perfect);
+            _hitSeSource.PlayOneShot(_hitClip, 0.7f);
+            _highway.FlashLight(g);
+            note.OnHit();
+            RemoveFromLanes(note);
+        }
     }
 
     IEnumerable<NoteController> Candidates(int laneA, int laneB)

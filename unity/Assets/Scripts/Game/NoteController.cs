@@ -11,34 +11,36 @@ public class NoteController : MonoBehaviour
     public bool  IsMissed        { get; private set; }
     public bool  IsSlide         { get; private set; }
     public int   SlideEndGroup   { get; private set; }
+    public bool  IsHeld          { get; private set; }
 
     RhythmGameManager    _manager;
     Action<NoteController> _returnToPool;
     GameObject _holdBody;
     Material   _holdBodyMat;
     float      _holdEndTime;
-    GameObject _slideTarget; // 終点インジケータ
+    GameObject _slideTarget;
+    GameObject _highlight;   // タップノーツの立体感ハイライト
 
-    static readonly Color ColorTap    = new Color(1.0f, 0.95f, 0.2f);
-    static readonly Color ColorLong   = new Color(0.2f, 0.85f, 1.0f);
-    static readonly Color ColorSlide  = new Color(1.0f, 0.55f, 0.05f);
-    static readonly Color ColorBody   = new Color(0.15f, 0.65f, 1.0f, 0.7f);
-    static readonly Color ColorTarget = new Color(1.0f, 0.75f, 0.2f);
+    static readonly Color ColorTap       = new Color(1.0f, 0.30f, 0.58f); // ピンク
+    static readonly Color ColorTapHi     = new Color(1.0f, 0.65f, 0.80f); // ピンクハイライト
+    static readonly Color ColorHeld      = new Color(1.0f, 0.95f, 0.2f);  // 黄色
+    static readonly Color ColorLong      = new Color(0.2f, 0.85f, 1.0f);
+    static readonly Color ColorSlide     = new Color(1.0f, 0.55f, 0.05f);
+    static readonly Color ColorBody      = new Color(0.15f, 0.65f, 1.0f, 0.7f);
+    static readonly Color ColorTarget    = new Color(1.0f, 0.75f, 0.2f);
 
     static Material _sharedTapMat;
+    static Material _sharedTapHiMat;
+    static Material _sharedHeldMat;
     static Material _sharedLongMat;
     static Material _sharedSlideMat;
 
-    static Material SharedMat(bool isLong, bool isSlide)
+    static Material SharedMat(bool isLong, bool isSlide, bool isHeld)
     {
-        if (isSlide)
-            return _sharedSlideMat != null ? _sharedSlideMat
-                : (_sharedSlideMat = MakeMat(ColorSlide));
-        if (isLong)
-            return _sharedLongMat != null ? _sharedLongMat
-                : (_sharedLongMat = MakeMat(ColorLong));
-        return _sharedTapMat != null ? _sharedTapMat
-            : (_sharedTapMat = MakeMat(ColorTap));
+        if (isSlide) return _sharedSlideMat ??= MakeMat(ColorSlide);
+        if (isLong)  return _sharedLongMat  ??= MakeMat(ColorLong);
+        if (isHeld)  return _sharedHeldMat  ??= MakeMat(ColorHeld);
+        return           _sharedTapMat  ??= MakeMat(ColorTap);
     }
 
     static Material MakeMat(Color c)
@@ -50,7 +52,7 @@ public class NoteController : MonoBehaviour
 
     public void Init(float hitTimeSec, int[] lanes, bool isLong, float holdSec,
                      RhythmGameManager manager, Action<NoteController> returnToPool,
-                     int slideEndGroup = -1)
+                     int slideEndGroup = -1, bool isHeld = false)
     {
         HitTimeSeconds = hitTimeSec;
         Lanes          = lanes;
@@ -63,13 +65,25 @@ public class NoteController : MonoBehaviour
         _returnToPool  = returnToPool;
         IsSlide        = slideEndGroup >= 0;
         SlideEndGroup  = slideEndGroup;
+        IsHeld         = isHeld;
 
         float x = LaneCenter(lanes);
         float w = LaneSpan(lanes) * 0.88f;
 
+        // タップノーツは立体感のため厚め
+        float noteH = (isLong || IsSlide || isHeld) ? 0.12f : 0.22f;
         transform.position   = new Vector3(x, 0.06f, GameConstants.NOTE_Z_SPAWN);
-        transform.localScale = new Vector3(w, 0.12f, 0.25f);
-        GetComponent<Renderer>().sharedMaterial = SharedMat(isLong, IsSlide);
+        transform.localScale = new Vector3(w, noteH, 0.25f);
+        GetComponent<Renderer>().sharedMaterial = SharedMat(isLong, IsSlide, isHeld);
+
+        // タップノーツ上面ハイライト（立体感）
+        if (!isLong && !IsSlide && !isHeld)
+        {
+            _highlight = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            Destroy(_highlight.GetComponent<Collider>());
+            _highlight.transform.localScale = new Vector3(w * 0.88f, 0.02f, 0.22f);
+            _highlight.GetComponent<Renderer>().sharedMaterial = (_sharedTapHiMat ??= MakeMat(ColorTapHi));
+        }
 
         if (isLong && holdSec > 0f)
         {
@@ -136,8 +150,27 @@ public class NoteController : MonoBehaviour
         if (_slideTarget != null)
             _slideTarget.transform.position = new Vector3(SlideEndX(), 0.08f, z);
 
+        if (_highlight != null)
+            _highlight.transform.position = new Vector3(transform.position.x, 0.17f, z);
+
         if (!IsHit && now > HitTimeSeconds + GameConstants.HIT_WINDOW_GOOD)
         {
+            // ロングノーツはボディ期間中はヘッドをヒットラインに固定して遅れ押し可能
+            if (IsLong && HoldDuration > 0f && now < HitTimeSeconds + HoldDuration)
+            {
+                transform.position = new Vector3(transform.position.x, 0.06f, GameConstants.NOTE_Z_HIT);
+                if (_holdBody != null)
+                {
+                    float rem  = HitTimeSeconds + HoldDuration - now;
+                    float blen = Mathf.Max(0.01f, rem * GameConstants.NOTE_SPEED);
+                    _holdBody.transform.localScale = new Vector3(
+                        _holdBody.transform.localScale.x,
+                        _holdBody.transform.localScale.y, blen);
+                    _holdBody.transform.position = new Vector3(
+                        transform.position.x, 0.03f, GameConstants.NOTE_Z_HIT - blen * 0.5f);
+                }
+                return;
+            }
             IsMissed = true;
             _manager.OnNoteMissed(this);
             Finish();
@@ -163,6 +196,7 @@ public class NoteController : MonoBehaviour
         if (_holdBody)    { Destroy(_holdBody);    _holdBody    = null; }
         if (_holdBodyMat) { Destroy(_holdBodyMat); _holdBodyMat = null; }
         if (_slideTarget) { Destroy(_slideTarget); _slideTarget = null; }
+        if (_highlight)   { Destroy(_highlight);   _highlight   = null; }
 
         if (_returnToPool != null)
         {
@@ -180,6 +214,7 @@ public class NoteController : MonoBehaviour
         if (_holdBody)    Destroy(_holdBody);
         if (_holdBodyMat) Destroy(_holdBodyMat);
         if (_slideTarget) Destroy(_slideTarget);
+        if (_highlight)   Destroy(_highlight);
     }
 
     float SlideEndX()
