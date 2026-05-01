@@ -42,6 +42,9 @@ public class RhythmGameManager : MonoBehaviour
     int   _score, _combo, _maxCombo;
     int   _perfect, _good, _miss;
     bool  _isPlaying;
+    bool  _fadingOut;
+    float _fadeTimer;
+    const float FADE_DURATION = 2f;
     double _startDspTime;
     bool  _videoHasAudio;
     float _musicTimeOffset;
@@ -304,7 +307,10 @@ public class RhythmGameManager : MonoBehaviour
         for (int g = 0; g < 6; g++) { _holdNote[g] = null; _keyHeld[g] = false; _holdTick[g] = 0f; _slideNote[g] = null; _slideSince[g] = 0f; }
 
         _score = _combo = _maxCombo = _perfect = _good = _miss = 0;
-        _spawnIndex       = 0;
+        _spawnIndex        = 0;
+        _fadingOut         = false;
+        _fadeTimer         = 0f;
+        audioSource.volume = 1f;
         _judgmentText     = "";
         _judgmentTimer    = 0f;
         _musicTimeOffset  = Mathf.Max(0f, debugStartTime);
@@ -396,8 +402,10 @@ public class RhythmGameManager : MonoBehaviour
 
     void EndGame()
     {
-        _isPlaying = false;
-        _state     = GameState.Result;
+        _isPlaying         = false;
+        _fadingOut         = false;
+        audioSource.volume = 1f;
+        _state             = GameState.Result;
         if (_videoPlayer != null) _videoPlayer.Stop();
     }
 
@@ -557,10 +565,19 @@ public class RhythmGameManager : MonoBehaviour
 
         // Song end detection (#8)
         float endTime = _chart.meta.duration > 0
-            ? _chart.meta.duration / 1000f + 1.5f
-            : (_chart.notes.Count > 0 ? _chart.notes[_chart.notes.Count - 1].t / 1000f + 3f : 10f);
-        if (MusicTime >= endTime && _spawnIndex >= _chart.notes.Count)
-            EndGame();
+            ? _chart.meta.duration / 1000f
+            : (_chart.notes.Count > 0 ? _chart.notes[_chart.notes.Count - 1].t / 1000f + 1f : 10f);
+        if (!_fadingOut && MusicTime >= endTime && _spawnIndex >= _chart.notes.Count)
+        {
+            _fadingOut = true;
+            _fadeTimer = 0f;
+        }
+        if (_fadingOut)
+        {
+            _fadeTimer += Time.deltaTime;
+            audioSource.volume = Mathf.Clamp01(1f - _fadeTimer / FADE_DURATION);
+            if (_fadeTimer >= FADE_DURATION) EndGame();
+        }
     }
 
     void HandleSelectInput()
