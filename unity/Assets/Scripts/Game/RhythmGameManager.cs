@@ -504,17 +504,17 @@ public class RhythmGameManager : MonoBehaviour
     static AudioClip GenerateHitClip()
     {
         const int sampleRate = 44100;
-        int len = (int)(sampleRate * 0.07f);
+        int len = (int)(sampleRate * 0.06f);
         var clip = AudioClip.Create("HitSE", len, 1, sampleRate, false);
         var data = new float[len];
-        var rng  = new System.Random(7);
+        float phase = 0f;
         for (int i = 0; i < len; i++)
         {
             float t    = (float)i / sampleRate;
-            float env  = Mathf.Exp(-t * 28f);
-            float noise = (float)(rng.NextDouble() * 2.0 - 1.0); // スネアのザラつき
-            float tone  = Mathf.Sin(2f * Mathf.PI * 180f * t);   // ボディの低音
-            data[i] = (noise * 0.65f + tone * 0.35f) * env * 0.7f;
+            float env  = Mathf.Exp(-t * 32f);
+            float freq = 900f * Mathf.Exp(-t * 22f) + 80f; // 900→80 Hz スイープで「ポン」
+            phase += 2f * Mathf.PI * freq / sampleRate;
+            data[i] = Mathf.Sin(phase) * env * 0.75f;
         }
         clip.SetData(data, 0);
         return clip;
@@ -769,7 +769,7 @@ public class RhythmGameManager : MonoBehaviour
         cam.transform.position = new Vector3(
             Mathf.Sin(t * 0.7f) * 0.03f,
             8.0f + Mathf.Sin(t * 1.1f) * 0.02f, 9f);
-        cam.transform.LookAt(new Vector3(0f, 0f, -8f));
+        cam.transform.LookAt(new Vector3(0f, 3f, -8f));
         UpdateBillboard();
     }
 
@@ -1107,11 +1107,11 @@ public class RhythmGameManager : MonoBehaviour
         Camera cam = Camera.main;
         if (cam == null) return;
         cam.orthographic  = false;
-        cam.fieldOfView   = 65f;
+        cam.fieldOfView   = 72f;
         cam.nearClipPlane = 0.3f;
         cam.farClipPlane  = 150f;
         cam.transform.position = new Vector3(0f, 8.0f, 9f);
-        cam.transform.LookAt(new Vector3(0f, 0f, -8f));
+        cam.transform.LookAt(new Vector3(0f, 3f, -8f));
         RenderSettings.fog        = true;
         RenderSettings.fogMode    = FogMode.Exponential;
         RenderSettings.fogDensity = 0.008f;
