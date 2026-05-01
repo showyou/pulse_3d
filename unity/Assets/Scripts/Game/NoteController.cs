@@ -82,8 +82,7 @@ public class NoteController : MonoBehaviour
             _highlight = GameObject.CreatePrimitive(PrimitiveType.Cube);
             Destroy(_highlight.GetComponent<Collider>());
             _highlight.transform.localScale = new Vector3(w * 0.88f, 0.02f, 0.22f);
-            (_sharedTapHiMat ??= MakeMat(ColorTapHi));
-            _highlight.GetComponent<Renderer>().sharedMaterial = _sharedTapHiMat;
+            _highlight.GetComponent<Renderer>().sharedMaterial = (_sharedTapHiMat ??= MakeMat(ColorTapHi));
         }
 
         if (isLong && holdSec > 0f)
