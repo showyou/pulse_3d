@@ -44,6 +44,9 @@ public class RhythmGameManager : MonoBehaviour
     readonly NoteController[]       _holdNote  = new NoteController[6];
     readonly bool[]                 _keyHeld   = new bool[6];
     readonly float[]                _holdTick  = new float[6];
+    readonly NoteController[]       _slideNote  = new NoteController[6];
+    readonly float[]                _slideSince = new float[6];
+    const float SLIDE_WINDOW = 0.5f;
 
     InputHandler   _input;
     HighwayBuilder _highway;
@@ -283,7 +286,7 @@ public class RhythmGameManager : MonoBehaviour
         foreach (var n in _notePool)
             if (n != null) Destroy(n.gameObject);
         _notePool.Clear();
-        for (int g = 0; g < 6; g++) { _holdNote[g] = null; _keyHeld[g] = false; _holdTick[g] = 0f; }
+        for (int g = 0; g < 6; g++) { _holdNote[g] = null; _keyHeld[g] = false; _holdTick[g] = 0f; _slideNote[g] = null; _slideSince[g] = 0f; }
 
         _score = _combo = _maxCombo = _perfect = _good = _miss = 0;
         _spawnIndex    = 0;
@@ -489,7 +492,7 @@ public class RhythmGameManager : MonoBehaviour
             Destroy(go.GetComponent<Collider>());
             ctrl = go.AddComponent<NoteController>();
         }
-        ctrl.Init(n.t / 1000f, n.lanes, n.isLong, n.holdMs / 1000f, this, ReturnNote);
+        ctrl.Init(n.t / 1000f, n.lanes, n.isLong, n.holdMs / 1000f, this, ReturnNote, n.slideEndGroup);
         foreach (int lane in n.lanes)
             _laneNotes[lane].Add(ctrl);
     }
@@ -601,6 +604,27 @@ public class RhythmGameManager : MonoBehaviour
         _keyHeld[group] = true;
         _highway.SetGroupGlow(group, true);
         if (!_isPlaying) return;
+
+        // スライド終点チェック：他グループで開始済みのスライドノーツの終点がこのグループか
+        for (int g = 0; g < 6; g++)
+        {
+            var sn = _slideNote[g];
+            if (sn == null || sn.SlideEndGroup != group) continue;
+            _slideNote[g] = null;
+            if (MusicTime - _slideSince[g] <= SLIDE_WINDOW)
+            {
+                RegisterJudgment(Judgment.Perfect);
+                SpawnHitEffect(sn, Judgment.Perfect);
+                _hitSeSource.PlayOneShot(_hitClip, 0.7f);
+                _highway.FlashLight(group);
+            }
+            else
+            {
+                RegisterJudgment(Judgment.Miss);
+            }
+            return;
+        }
+
         TryHit(group);
     }
 
@@ -624,6 +648,20 @@ public class RhythmGameManager : MonoBehaviour
 
         float err = Mathf.Abs(MusicTime - best.HitTimeSeconds);
         var j = err <= GameConstants.HIT_WINDOW_PERFECT ? Judgment.Perfect : Judgment.Good;
+
+        if (best.IsSlide)
+        {
+            // スライド始点: 判定を保留し終点グループの入力を待つ
+            RegisterJudgment(j);
+            SpawnHitEffect(best, j);
+            _hitSeSource.PlayOneShot(_hitClip, 0.7f);
+            _highway.FlashLight(group);
+            best.OnHit();
+            RemoveFromLanes(best);
+            _slideNote[group]  = best;
+            _slideSince[group] = MusicTime;
+            return;
+        }
 
         RegisterJudgment(j);
         SpawnHitEffect(best, j);

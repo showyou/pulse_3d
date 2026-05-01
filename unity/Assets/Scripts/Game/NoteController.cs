@@ -9,23 +9,31 @@ public class NoteController : MonoBehaviour
     public float HoldDuration    { get; private set; }
     public bool  IsHit           { get; private set; }
     public bool  IsMissed        { get; private set; }
+    public bool  IsSlide         { get; private set; }
+    public int   SlideEndGroup   { get; private set; }
 
     RhythmGameManager    _manager;
     Action<NoteController> _returnToPool;
     GameObject _holdBody;
     Material   _holdBodyMat;
     float      _holdEndTime;
+    GameObject _slideTarget; // 終点インジケータ
 
-    static readonly Color ColorTap  = new Color(1.0f, 0.95f, 0.2f);
-    static readonly Color ColorLong = new Color(0.2f, 0.85f, 1.0f);
-    static readonly Color ColorBody = new Color(0.15f, 0.65f, 1.0f, 0.7f);
+    static readonly Color ColorTap    = new Color(1.0f, 0.95f, 0.2f);
+    static readonly Color ColorLong   = new Color(0.2f, 0.85f, 1.0f);
+    static readonly Color ColorSlide  = new Color(1.0f, 0.55f, 0.05f);
+    static readonly Color ColorBody   = new Color(0.15f, 0.65f, 1.0f, 0.7f);
+    static readonly Color ColorTarget = new Color(1.0f, 0.75f, 0.2f);
 
-    // Shared materials — created once, reused across all notes
     static Material _sharedTapMat;
     static Material _sharedLongMat;
+    static Material _sharedSlideMat;
 
-    static Material SharedMat(bool isLong)
+    static Material SharedMat(bool isLong, bool isSlide)
     {
+        if (isSlide)
+            return _sharedSlideMat != null ? _sharedSlideMat
+                : (_sharedSlideMat = MakeMat(ColorSlide));
         if (isLong)
             return _sharedLongMat != null ? _sharedLongMat
                 : (_sharedLongMat = MakeMat(ColorLong));
@@ -41,7 +49,8 @@ public class NoteController : MonoBehaviour
     }
 
     public void Init(float hitTimeSec, int[] lanes, bool isLong, float holdSec,
-                     RhythmGameManager manager, Action<NoteController> returnToPool)
+                     RhythmGameManager manager, Action<NoteController> returnToPool,
+                     int slideEndGroup = -1)
     {
         HitTimeSeconds = hitTimeSec;
         Lanes          = lanes;
@@ -52,13 +61,15 @@ public class NoteController : MonoBehaviour
         _holdEndTime   = 0f;
         _manager       = manager;
         _returnToPool  = returnToPool;
+        IsSlide        = slideEndGroup >= 0;
+        SlideEndGroup  = slideEndGroup;
 
         float x = LaneCenter(lanes);
         float w = LaneSpan(lanes) * 0.88f;
 
         transform.position   = new Vector3(x, 0.06f, GameConstants.NOTE_Z_SPAWN);
         transform.localScale = new Vector3(w, 0.12f, 0.25f);
-        GetComponent<Renderer>().sharedMaterial = SharedMat(isLong);
+        GetComponent<Renderer>().sharedMaterial = SharedMat(isLong, IsSlide);
 
         if (isLong && holdSec > 0f)
         {
@@ -70,6 +81,16 @@ public class NoteController : MonoBehaviour
             _holdBodyMat = new Material(SafeShader());
             HighwayBuilder.ApplyColor(_holdBodyMat, ColorBody);
             _holdBody.GetComponent<Renderer>().sharedMaterial = _holdBodyMat;
+        }
+
+        if (IsSlide)
+        {
+            _slideTarget = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            Destroy(_slideTarget.GetComponent<Collider>());
+            _slideTarget.transform.localScale = new Vector3(GameConstants.LANE_SPACING * 1.7f, 0.12f, 0.18f);
+            var tMat = new Material(SafeShader());
+            HighwayBuilder.ApplyColor(tMat, ColorTarget);
+            _slideTarget.GetComponent<Renderer>().sharedMaterial = tMat;
         }
     }
 
@@ -112,6 +133,9 @@ public class NoteController : MonoBehaviour
             _holdBody.transform.position = new Vector3(transform.position.x, 0.03f, z - blen * 0.5f);
         }
 
+        if (_slideTarget != null)
+            _slideTarget.transform.position = new Vector3(SlideEndX(), 0.08f, z);
+
         if (!IsHit && now > HitTimeSeconds + GameConstants.HIT_WINDOW_GOOD)
         {
             IsMissed = true;
@@ -136,8 +160,9 @@ public class NoteController : MonoBehaviour
 
     void Finish()
     {
-        if (_holdBody) { Destroy(_holdBody); _holdBody = null; }
-        if (_holdBodyMat != null) { Destroy(_holdBodyMat); _holdBodyMat = null; }
+        if (_holdBody)    { Destroy(_holdBody);    _holdBody    = null; }
+        if (_holdBodyMat) { Destroy(_holdBodyMat); _holdBodyMat = null; }
+        if (_slideTarget) { Destroy(_slideTarget); _slideTarget = null; }
 
         if (_returnToPool != null)
         {
@@ -152,8 +177,16 @@ public class NoteController : MonoBehaviour
 
     void OnDestroy()
     {
-        if (_holdBody) Destroy(_holdBody);
-        if (_holdBodyMat != null) Destroy(_holdBodyMat);
+        if (_holdBody)    Destroy(_holdBody);
+        if (_holdBodyMat) Destroy(_holdBodyMat);
+        if (_slideTarget) Destroy(_slideTarget);
+    }
+
+    float SlideEndX()
+    {
+        int lA = GameConstants.KEY_LANES[SlideEndGroup, 0];
+        int lB = GameConstants.KEY_LANES[SlideEndGroup, 1];
+        return (5.5f - (lA + lB) * 0.5f) * GameConstants.LANE_SPACING;
     }
 
     static float LaneCenter(int[] lanes)

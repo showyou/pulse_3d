@@ -4,10 +4,11 @@ using System.Collections.Generic;
 [Serializable]
 public class ChartNote
 {
-    public int t;        // hit time in milliseconds
+    public int   t;              // hit time in milliseconds
     public int[] lanes;
-    public bool isLong;
-    public int holdMs;
+    public bool  isLong;
+    public int   holdMs;
+    public int   slideEndGroup;  // -1: normal note, 0-5: slide destination group
 }
 
 [Serializable]
