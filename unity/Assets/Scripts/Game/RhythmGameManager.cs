@@ -57,6 +57,8 @@ public class RhythmGameManager : MonoBehaviour
     // Hit SE (#13)
     AudioSource _hitSeSource;
     AudioClip   _hitClip;
+    AudioSource _holdSeSource;
+    AudioClip   _holdClip;
 
     // Hit effect pool (#14)
     readonly Queue<HitEffectController> _effectPool = new Queue<HitEffectController>();
@@ -103,6 +105,10 @@ public class RhythmGameManager : MonoBehaviour
         _hitSeSource       = gameObject.AddComponent<AudioSource>();
         _hitSeSource.playOnAwake = false;
         _hitClip           = GenerateHitClip();
+
+        _holdSeSource      = gameObject.AddComponent<AudioSource>();
+        _holdSeSource.playOnAwake = false;
+        _holdClip          = GenerateHoldClip();
 
         LoadMetadata();
     }
@@ -495,15 +501,34 @@ public class RhythmGameManager : MonoBehaviour
     static AudioClip GenerateHitClip()
     {
         const int sampleRate = 44100;
-        int len = (int)(sampleRate * 0.07f);
+        int len = (int)(sampleRate * 0.045f);
         var clip = AudioClip.Create("HitSE", len, 1, sampleRate, false);
         var data = new float[len];
         for (int i = 0; i < len; i++)
         {
-            float t    = (float)i / len;
-            float freq = Mathf.Lerp(1200f, 600f, t);
-            float env  = Mathf.Pow(1f - t, 1.8f);
-            data[i] = Mathf.Sin(2f * Mathf.PI * freq * i / sampleRate) * env * 0.55f;
+            float t   = (float)i / sampleRate;
+            float env = Mathf.Exp(-t * 60f); // 金属的な急速減衰
+            // 基音3800Hz + 倍音で「カン」
+            float wave = Mathf.Sin(2f * Mathf.PI * 3800f * t) * 0.55f
+                       + Mathf.Sin(2f * Mathf.PI * 6200f * t) * 0.30f
+                       + Mathf.Sin(2f * Mathf.PI * 9100f * t) * 0.15f;
+            data[i] = wave * env * 0.65f;
+        }
+        clip.SetData(data, 0);
+        return clip;
+    }
+
+    static AudioClip GenerateHoldClip()
+    {
+        const int sampleRate = 44100;
+        int len = (int)(sampleRate * 0.03f);
+        var clip = AudioClip.Create("HoldSE", len, 1, sampleRate, false);
+        var data = new float[len];
+        for (int i = 0; i < len; i++)
+        {
+            float t   = (float)i / sampleRate;
+            float env = Mathf.Exp(-t * 120f);
+            data[i] = Mathf.Sin(2f * Mathf.PI * 6000f * t) * env * 0.30f;
         }
         clip.SetData(data, 0);
         return clip;
@@ -632,6 +657,7 @@ public class RhythmGameManager : MonoBehaviour
             {
                 _holdTick[g] -= 0.1f;
                 _score += 10 * (1 + _combo / 4);
+                _holdSeSource.PlayOneShot(_holdClip, 0.5f);
             }
         }
     }
