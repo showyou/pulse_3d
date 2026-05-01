@@ -768,8 +768,8 @@ public class RhythmGameManager : MonoBehaviour
         float t = Time.time;
         cam.transform.position = new Vector3(
             Mathf.Sin(t * 0.7f) * 0.03f,
-            8.0f + Mathf.Sin(t * 1.1f) * 0.02f, 9f);
-        cam.transform.LookAt(new Vector3(0f, 5.5f, -8f));
+            5.5f + Mathf.Sin(t * 1.1f) * 0.02f, 9f);
+        cam.transform.LookAt(new Vector3(0f, 0f, -8f));
         UpdateBillboard();
     }
 
@@ -1107,11 +1107,11 @@ public class RhythmGameManager : MonoBehaviour
         Camera cam = Camera.main;
         if (cam == null) return;
         cam.orthographic  = false;
-        cam.fieldOfView   = 80f;
+        cam.fieldOfView   = 65f;
         cam.nearClipPlane = 0.3f;
         cam.farClipPlane  = 150f;
-        cam.transform.position = new Vector3(0f, 8.0f, 9f);
-        cam.transform.LookAt(new Vector3(0f, 5.5f, -8f));
+        cam.transform.position = new Vector3(0f, 5.5f, 9f);
+        cam.transform.LookAt(new Vector3(0f, 0f, -8f));
         RenderSettings.fog        = true;
         RenderSettings.fogMode    = FogMode.Exponential;
         RenderSettings.fogDensity = 0.008f;
