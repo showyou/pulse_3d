@@ -455,6 +455,7 @@ public class RhythmGameManager : MonoBehaviour
         SpawnDueNotes();
         if (autoPlay) AutoPlayUpdate();
         CheckHeldKeysForLongNotes();
+        CheckHeldNotes();
         UpdateHoldTicks();
         UpdateJudgmentDisplay();
         UpdateCameraBob();
@@ -497,7 +498,7 @@ public class RhythmGameManager : MonoBehaviour
             Destroy(go.GetComponent<Collider>());
             ctrl = go.AddComponent<NoteController>();
         }
-        ctrl.Init(n.t / 1000f, n.lanes, n.isLong, n.holdMs / 1000f, this, ReturnNote, n.slideEndGroup);
+        ctrl.Init(n.t / 1000f, n.lanes, n.isLong, n.holdMs / 1000f, this, ReturnNote, n.slideEndGroup, n.isHeld);
         foreach (int lane in n.lanes)
             _laneNotes[lane].Add(ctrl);
     }
@@ -710,12 +711,42 @@ public class RhythmGameManager : MonoBehaviour
         float bestErr = float.MaxValue;
         foreach (var note in Candidates(laneA, laneB))
         {
-            if (note.IsHit || note.IsMissed) continue;
+            if (note.IsHit || note.IsMissed || note.IsHeld) continue;
             float err = Mathf.Abs(MusicTime - note.HitTimeSeconds);
             if (err <= GameConstants.HIT_WINDOW_GOOD && err < bestErr)
             { bestErr = err; best = note; }
         }
         return best;
+    }
+
+    NoteController FindBestHeldNote(int laneA, int laneB)
+    {
+        NoteController best = null;
+        float bestErr = float.MaxValue;
+        foreach (var note in Candidates(laneA, laneB))
+        {
+            if (!note.IsHeld || note.IsHit || note.IsMissed) continue;
+            float err = Mathf.Abs(MusicTime - note.HitTimeSeconds);
+            if (err <= GameConstants.HIT_WINDOW_GOOD && err < bestErr)
+            { bestErr = err; best = note; }
+        }
+        return best;
+    }
+
+    void CheckHeldNotes()
+    {
+        for (int g = 0; g < 6; g++)
+        {
+            if (!_keyHeld[g]) continue;
+            var note = FindBestHeldNote(GameConstants.KEY_LANES[g, 0], GameConstants.KEY_LANES[g, 1]);
+            if (note == null) continue;
+            RegisterJudgment(Judgment.Perfect);
+            SpawnHitEffect(note, Judgment.Perfect);
+            _hitSeSource.PlayOneShot(_hitClip, 0.7f);
+            _highway.FlashLight(g);
+            note.OnHit();
+            RemoveFromLanes(note);
+        }
     }
 
     IEnumerable<NoteController> Candidates(int laneA, int laneB)
