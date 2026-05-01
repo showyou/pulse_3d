@@ -9,7 +9,7 @@ using UnityEngine.Video;
 
 public enum Judgment { Perfect, Good, Miss }
 
-enum GameState { Select, Loading, Playing, Result }
+enum GameState { Select, Loading, Playing, Result, Edit }
 
 public class RhythmGameManager : MonoBehaviour
 {
@@ -45,6 +45,11 @@ public class RhythmGameManager : MonoBehaviour
     double _startDspTime;
     bool  _videoHasAudio;
     float _musicTimeOffset;
+
+    // Edit (charting) mode
+    bool  _editMode;
+    readonly List<ChartNote> _editNotes     = new List<ChartNote>();
+    readonly float[]         _editPressTime = new float[6];
 
     ChartData _chart;
     int       _spawnIndex;
@@ -222,7 +227,8 @@ public class RhythmGameManager : MonoBehaviour
         // Direct/AudioSourceモードはUnity Editorでバッファ問題があるため
 
         _statusMsg = "";
-        StartGame();
+        if (_editMode) StartEditMode();
+        else           StartGame();
     }
 
     // ---------------------------------------------------------------
@@ -327,6 +333,67 @@ public class RhythmGameManager : MonoBehaviour
         Debug.Log($"[PULSE] StartGame: {_chart.meta.title}  notes={_chart.notes.Count}");
     }
 
+    // ---------------------------------------------------------------
+    // Edit (charting) mode
+    void StartEditMode()
+    {
+        _editNotes.Clear();
+        for (int i = 0; i < 6; i++) _editPressTime[i] = -1f;
+
+        _musicTimeOffset = 0f;
+        _startDspTime    = AudioSettings.dspTime + 1.0;
+        if (audioSource.clip != null)
+            audioSource.PlayScheduled(_startDspTime);
+
+        _isPlaying = true;
+        _state     = GameState.Edit;
+
+        if (_videoPlayer != null)
+            StartCoroutine(PlayVideoWhenReady());
+
+        Debug.Log($"[PULSE] StartEditMode: {_chart.meta.title}");
+    }
+
+    void EndEditMode()
+    {
+        _isPlaying = false;
+        audioSource.Stop();
+        if (_videoPlayer != null) _videoPlayer.Stop();
+
+        _editNotes.Sort((a, b) => a.t.CompareTo(b.t));
+
+        string outPath = FindEditOutputPath(_currentSong?.id ?? "chart");
+        var chart = new ChartData {
+            format  = "pulse3d_v1",
+            version = 1,
+            meta    = new ChartMeta {
+                title     = _currentSong?.title ?? _chart.meta?.title ?? "",
+                bpm       = _currentSong?.bpm   ?? _chart.meta?.bpm ?? 0f,
+                duration  = _currentSong?.duration > 0 ? (int)(_currentSong.duration) : (_chart.meta?.duration ?? 0),
+                audioFile = _chart.meta?.audioFile ?? "",
+                videoFile = _chart.meta?.videoFile ?? "",
+            },
+            notes = _editNotes,
+        };
+        File.WriteAllText(outPath, JsonUtility.ToJson(chart, true));
+        Debug.Log($"[PULSE] Edit saved: {outPath}  notes={_editNotes.Count}");
+
+        _statusMsg = $"Saved: {Path.GetFileName(outPath)}  ({_editNotes.Count} notes)";
+        _state = GameState.Select;
+    }
+
+    string FindEditOutputPath(string songId)
+    {
+        string dir = Path.Combine(Application.streamingAssetsPath, "charts");
+        if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+        for (int i = 1; i <= 999; i++)
+        {
+            string path = Path.Combine(dir, $"{songId}_{i:D3}.json");
+            if (!File.Exists(path)) return path;
+        }
+        return Path.Combine(dir, $"{songId}_999.json");
+    }
+
     void EndGame()
     {
         _isPlaying = false;
@@ -426,8 +493,7 @@ public class RhythmGameManager : MonoBehaviour
         _videoPlayer.prepareCompleted += vp =>
             Debug.Log($"[PULSE] Video prepared OK  size={vp.width}x{vp.height}  framerate={vp.frameRate:F2}  audioTracks={vp.audioTrackCount}");
         // フレームデコードが進んでるかを最初の数枚だけ確認
-        _videoPlayer.sendFrameReadyEvents = true;
-        _videoPlayer.frameReady += (vp, idx) => { if (idx < 5) Debug.Log($"[PULSE] Frame ready: {idx}"); };
+        _videoPlayer.sendFrameReadyEvents = false;
         _videoPlayer.Prepare();
 
         Debug.Log($"[PULSE] BgQuad+RT: shader='{shader?.name}' texProp={texProp} rt={_videoRt.width}x{_videoRt.height}");
@@ -462,6 +528,17 @@ public class RhythmGameManager : MonoBehaviour
             }
             return;
         }
+        if (_state == GameState.Edit)
+        {
+            MusicTime = (float)(AudioSettings.dspTime - _startDspTime);
+            UpdateBillboard();
+            var kb2 = Keyboard.current;
+            if (kb2 != null && kb2[Key.Escape].wasPressedThisFrame) EndEditMode();
+            float editEnd = _chart?.meta?.duration > 0 ? _chart.meta.duration / 1000f + 1.5f : 9999f;
+            if (MusicTime >= editEnd) EndEditMode();
+            return;
+        }
+
         if (_state != GameState.Playing || !_isPlaying || _chart == null) return;
 
         MusicTime = (float)(AudioSettings.dspTime - _startDspTime) + _musicTimeOffset;
@@ -626,6 +703,13 @@ public class RhythmGameManager : MonoBehaviour
     {
         _keyHeld[group] = true;
         _highway.SetGroupGlow(group, true);
+
+        if (_state == GameState.Edit)
+        {
+            _editPressTime[group] = MusicTime;
+            return;
+        }
+
         if (!_isPlaying) return;
 
         // スライド終点チェック：他グループで開始済みのスライドノーツの終点がこのグループか
@@ -655,6 +739,27 @@ public class RhythmGameManager : MonoBehaviour
     {
         _keyHeld[group] = false;
         _highway.SetGroupGlow(group, false);
+
+        if (_state == GameState.Edit)
+        {
+            if (_editPressTime[group] >= 0f)
+            {
+                int   t      = Mathf.RoundToInt(_editPressTime[group] * 1000f);
+                int   holdMs = Mathf.RoundToInt((MusicTime - _editPressTime[group]) * 1000f);
+                bool  isLong = holdMs > 100;
+                _editNotes.Add(new ChartNote {
+                    t             = t,
+                    lanes         = new[] { GameConstants.KEY_LANES[group, 0], GameConstants.KEY_LANES[group, 1] },
+                    isLong        = isLong,
+                    holdMs        = isLong ? holdMs : 0,
+                    slideEndGroup = -1,
+                    isHeld        = false,
+                });
+                _editPressTime[group] = -1f;
+            }
+            return;
+        }
+
         if (_holdNote[group] != null)
         {
             _holdNote[group].OnHoldReleased();
@@ -849,6 +954,7 @@ public class RhythmGameManager : MonoBehaviour
             case GameState.Loading: DrawLoadingScreen(); break;
             case GameState.Playing: DrawPlayingUI();     break;
             case GameState.Result:  DrawResultScreen();  break;
+            case GameState.Edit:    DrawEditUI();        break;
         }
     }
 
@@ -928,6 +1034,14 @@ public class RhythmGameManager : MonoBehaviour
                 else                     _selectedIndex = i;
             }
         }
+
+        // EDITトグル（右上）
+        var editStyle = LabelStyle(17, FontStyle.Bold,
+            _editMode ? new Color(1f, 0.4f, 0.4f) : new Color(0.4f, 0.4f, 0.4f));
+        editStyle.alignment = TextAnchor.MiddleCenter;
+        if (GUI.Button(new Rect(Screen.width - 120, 12, 108, 30),
+                _editMode ? "EDIT: ON" : "EDIT: OFF", editStyle))
+            _editMode = !_editMode;
 
         var hint = LabelStyle(18, FontStyle.Normal, new Color(0.5f, 0.5f, 0.5f));
         hint.alignment = TextAnchor.MiddleCenter;
@@ -1070,6 +1184,35 @@ public class RhythmGameManager : MonoBehaviour
         s.alignment = TextAnchor.MiddleCenter;
         if (GUI.Button(new Rect(Screen.width - 120, 12, 108, 30), autoPlay ? "AUTO: ON" : "AUTO: OFF"))
             autoPlay = !autoPlay;
+    }
+
+    // -- Edit (charting) UI --
+    void DrawEditUI()
+    {
+        // 点滅する録音インジケータ
+        float blink = Mathf.Sin(Time.time * 6f) > 0f ? 1f : 0.3f;
+        var recStyle = LabelStyle(28, FontStyle.Bold, new Color(1f, 0.2f, 0.2f, blink));
+        GUI.Label(new Rect(18, 14, 160, 36), "● REC", recStyle);
+
+        // 経過時間
+        float now = Mathf.Max(0f, MusicTime);
+        string timeStr = $"{(int)(now / 60)}:{(int)(now % 60):D2}.{(int)(now * 10f) % 10}";
+        var timeStyle = LabelStyle(44, FontStyle.Bold, Color.white);
+        OutlineLabel(new Rect(18, 48, 300, 56), timeStr, timeStyle,
+            new Color(0f, 0f, 0f, 0.85f), 2f);
+
+        // ノート数
+        var noteStyle = LabelStyle(22, FontStyle.Normal, new Color(0.6f, 0.9f, 1f));
+        GUI.Label(new Rect(18, 102, 300, 30), $"Notes: {_editNotes.Count}", noteStyle);
+
+        // キーインジケータ
+        DrawKeyIndicators();
+
+        // ヒント
+        var hint = LabelStyle(18, FontStyle.Normal, new Color(0.5f, 0.5f, 0.5f));
+        hint.alignment = TextAnchor.MiddleCenter;
+        GUI.Label(new Rect(0, Screen.height - 50, Screen.width, 30),
+            "Press keys to record notes    ESC: finish & save", hint);
     }
 
     // -- Result screen --
