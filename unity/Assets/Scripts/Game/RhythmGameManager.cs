@@ -22,7 +22,7 @@ public class RhythmGameManager : MonoBehaviour
     [Header("Camera")]
     public float camFov     = 65f;
     public float camY       = 5.5f;
-    public float camLookAtY = 0f;
+    public float camLookAtY = -4.5f;
 
     // ---------------------------------------------------------------
     // State
