@@ -405,8 +405,12 @@ public class RhythmGameManager : MonoBehaviour
         _isPlaying         = false;
         _fadingOut         = false;
         audioSource.volume = 1f;
-        _state             = GameState.Result;
-        if (_videoPlayer != null) _videoPlayer.Stop();
+        if (_videoPlayer != null)
+        {
+            if (_videoHasAudio) _videoPlayer.SetDirectAudioVolume(0, 1f);
+            _videoPlayer.Stop();
+        }
+        _state = GameState.Result;
     }
 
     void RetrySong()
@@ -575,7 +579,10 @@ public class RhythmGameManager : MonoBehaviour
         if (_fadingOut)
         {
             _fadeTimer += Time.deltaTime;
-            audioSource.volume = Mathf.Clamp01(1f - _fadeTimer / FADE_DURATION);
+            float vol = Mathf.Clamp01(1f - _fadeTimer / FADE_DURATION);
+            audioSource.volume = vol;
+            if (_videoHasAudio && _videoPlayer != null)
+                _videoPlayer.SetDirectAudioVolume(0, vol);
             if (_fadeTimer >= FADE_DURATION) EndGame();
         }
     }
