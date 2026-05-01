@@ -493,8 +493,7 @@ public class RhythmGameManager : MonoBehaviour
         _videoPlayer.prepareCompleted += vp =>
             Debug.Log($"[PULSE] Video prepared OK  size={vp.width}x{vp.height}  framerate={vp.frameRate:F2}  audioTracks={vp.audioTrackCount}");
         // フレームデコードが進んでるかを最初の数枚だけ確認
-        _videoPlayer.sendFrameReadyEvents = true;
-        _videoPlayer.frameReady += (vp, idx) => { if (idx < 5) Debug.Log($"[PULSE] Frame ready: {idx}"); };
+        _videoPlayer.sendFrameReadyEvents = false;
         _videoPlayer.Prepare();
 
         Debug.Log($"[PULSE] BgQuad+RT: shader='{shader?.name}' texProp={texProp} rt={_videoRt.width}x{_videoRt.height}");
