@@ -3,6 +3,9 @@
 __pycache__/
 *.pyc
 
+# Local song library (machine-specific)
+unity/Assets/StreamingAssets/songs/metadata.json
+
 # Fumen data (copyright unclear)
 fumen.json
 fumen_min.json
