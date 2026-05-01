@@ -602,7 +602,7 @@ public class RhythmGameManager : MonoBehaviour
 
     // ---------------------------------------------------------------
     // Note pool (#4)
-    void SpawnNote(ChartNote n)
+    NoteController SpawnNote(ChartNote n)
     {
         NoteController ctrl;
         if (_notePool.Count > 0)
@@ -620,6 +620,22 @@ public class RhythmGameManager : MonoBehaviour
         ctrl.Init(n.t / 1000f, n.lanes, n.isLong, n.holdMs / 1000f, this, ReturnNote, n.slideEndGroup, n.isHeld);
         foreach (int lane in n.lanes)
             _laneNotes[lane].Add(ctrl);
+        return ctrl;
+    }
+
+    void SpawnChordConnector(System.Collections.Generic.List<NoteController> notes)
+    {
+        float xMin = float.MaxValue, xMax = float.MinValue;
+        foreach (var n in notes)
+        {
+            float half = n.transform.localScale.x * 0.5f;
+            xMin = Mathf.Min(xMin, n.transform.position.x - half);
+            xMax = Mathf.Max(xMax, n.transform.position.x + half);
+        }
+        var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        go.name = "ChordConnector";
+        Destroy(go.GetComponent<Collider>());
+        go.AddComponent<ChordConnector>().Init(notes[0], xMin, xMax);
     }
 
     void ReturnNote(NoteController n) => _notePool.Enqueue(n);
@@ -716,10 +732,20 @@ public class RhythmGameManager : MonoBehaviour
     {
         while (_spawnIndex < _chart.notes.Count)
         {
-            var n = _chart.notes[_spawnIndex];
-            if (MusicTime < n.t / 1000f - GameConstants.TRAVEL_TIME) break;
-            SpawnNote(n);
-            _spawnIndex++;
+            var first = _chart.notes[_spawnIndex];
+            if (MusicTime < first.t / 1000f - GameConstants.TRAVEL_TIME) break;
+
+            // 同じ t を持つノーツをまとめてスポーン
+            int sameT = first.t;
+            var batch = new System.Collections.Generic.List<NoteController>();
+            while (_spawnIndex < _chart.notes.Count && _chart.notes[_spawnIndex].t == sameT)
+            {
+                batch.Add(SpawnNote(_chart.notes[_spawnIndex]));
+                _spawnIndex++;
+            }
+
+            if (batch.Count > 1)
+                SpawnChordConnector(batch);
         }
     }
 
