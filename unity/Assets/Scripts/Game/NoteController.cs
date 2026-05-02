@@ -13,27 +13,35 @@ public class NoteController : MonoBehaviour
     public int   SlideEndGroup   { get; private set; }
     public bool  IsHeld          { get; private set; }
 
-    RhythmGameManager    _manager;
+    RhythmGameManager      _manager;
     Action<NoteController> _returnToPool;
     GameObject _holdBody;
     Material   _holdBodyMat;
     float      _holdEndTime;
     GameObject _slideTarget;
-    GameObject _highlight;   // タップノーツの立体感ハイライト
+    GameObject _highlight;       // 上面ハイライト（全ノーツ）
+    GameObject _frontHighlight;  // 手前フェースハイライト（全ノーツ）
+    float      _topHighY;        // 上面ハイライトの Y 座標
 
-    static readonly Color ColorTap       = new Color(1.0f, 0.30f, 0.58f); // ピンク
-    static readonly Color ColorTapHi     = new Color(1.0f, 0.65f, 0.80f); // ピンクハイライト
-    static readonly Color ColorHeld      = new Color(1.0f, 0.95f, 0.2f);  // 黄色
+    static readonly Color ColorTap       = new Color(1.0f, 0.30f, 0.58f);
+    static readonly Color ColorTapHi     = new Color(1.0f, 0.70f, 0.85f);
+    static readonly Color ColorHeld      = new Color(1.0f, 0.95f, 0.2f);
+    static readonly Color ColorHeldHi    = new Color(1.0f, 1.0f,  0.65f);
     static readonly Color ColorLong      = new Color(0.2f, 0.85f, 1.0f);
+    static readonly Color ColorLongHi    = new Color(0.6f, 0.97f, 1.0f);
     static readonly Color ColorSlide     = new Color(1.0f, 0.55f, 0.05f);
+    static readonly Color ColorSlideHi   = new Color(1.0f, 0.80f, 0.45f);
     static readonly Color ColorBody      = new Color(0.15f, 0.65f, 1.0f, 0.7f);
     static readonly Color ColorTarget    = new Color(1.0f, 0.75f, 0.2f);
 
     static Material _sharedTapMat;
     static Material _sharedTapHiMat;
     static Material _sharedHeldMat;
+    static Material _sharedHeldHiMat;
     static Material _sharedLongMat;
+    static Material _sharedLongHiMat;
     static Material _sharedSlideMat;
+    static Material _sharedSlideHiMat;
 
     static Material SharedMat(bool isLong, bool isSlide, bool isHeld)
     {
@@ -41,6 +49,14 @@ public class NoteController : MonoBehaviour
         if (isLong)  return _sharedLongMat  ??= MakeMat(ColorLong);
         if (isHeld)  return _sharedHeldMat  ??= MakeMat(ColorHeld);
         return           _sharedTapMat  ??= MakeMat(ColorTap);
+    }
+
+    static Material HiMat(bool isLong, bool isSlide, bool isHeld)
+    {
+        if (isSlide) return _sharedSlideHiMat ??= MakeMat(ColorSlideHi);
+        if (isLong)  return _sharedLongHiMat  ??= MakeMat(ColorLongHi);
+        if (isHeld)  return _sharedHeldHiMat  ??= MakeMat(ColorHeldHi);
+        return           _sharedTapHiMat  ??= MakeMat(ColorTapHi);
     }
 
     static Material MakeMat(Color c)
@@ -70,20 +86,25 @@ public class NoteController : MonoBehaviour
         float x = LaneCenter(lanes);
         float w = LaneSpan(lanes) * 0.88f;
 
-        // タップノーツは立体感のため厚め
         float noteH = (isLong || IsSlide || isHeld) ? 0.12f : 0.22f;
         transform.position   = new Vector3(x, 0.06f, GameConstants.NOTE_Z_SPAWN);
         transform.localScale = new Vector3(w, noteH, 0.25f);
         GetComponent<Renderer>().sharedMaterial = SharedMat(isLong, IsSlide, isHeld);
 
-        // タップノーツ上面ハイライト（立体感）
-        if (!isLong && !IsSlide && !isHeld)
-        {
-            _highlight = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            Destroy(_highlight.GetComponent<Collider>());
-            _highlight.transform.localScale = new Vector3(w * 0.88f, 0.02f, 0.22f);
-            _highlight.GetComponent<Renderer>().sharedMaterial = (_sharedTapHiMat ??= MakeMat(ColorTapHi));
-        }
+        var hiMat = HiMat(isLong, IsSlide, isHeld);
+        _topHighY = 0.06f + noteH * 0.5f;
+
+        // 上面ハイライト（全ノーツ）
+        _highlight = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        Destroy(_highlight.GetComponent<Collider>());
+        _highlight.transform.localScale = new Vector3(w * 0.88f, 0.02f, 0.23f);
+        _highlight.GetComponent<Renderer>().sharedMaterial = hiMat;
+
+        // 手前フェースハイライト（全ノーツ）
+        _frontHighlight = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        Destroy(_frontHighlight.GetComponent<Collider>());
+        _frontHighlight.transform.localScale = new Vector3(w * 0.85f, noteH * 0.75f, 0.03f);
+        _frontHighlight.GetComponent<Renderer>().sharedMaterial = hiMat;
 
         if (isLong && holdSec > 0f)
         {
@@ -122,6 +143,7 @@ public class NoteController : MonoBehaviour
         if (IsHit && IsLong)
         {
             transform.position = new Vector3(transform.position.x, 0.06f, GameConstants.NOTE_Z_HIT);
+            UpdateHighlights(GameConstants.NOTE_Z_HIT);
             if (_holdBody != null)
             {
                 float rem = _holdEndTime - now;
@@ -150,15 +172,14 @@ public class NoteController : MonoBehaviour
         if (_slideTarget != null)
             _slideTarget.transform.position = new Vector3(SlideEndX(), 0.08f, z);
 
-        if (_highlight != null)
-            _highlight.transform.position = new Vector3(transform.position.x, 0.17f, z);
+        UpdateHighlights(z);
 
         if (!IsHit && now > HitTimeSeconds + GameConstants.HIT_WINDOW_GOOD)
         {
-            // ロングノーツはボディ期間中はヘッドをヒットラインに固定して遅れ押し可能
             if (IsLong && HoldDuration > 0f && now < HitTimeSeconds + HoldDuration)
             {
                 transform.position = new Vector3(transform.position.x, 0.06f, GameConstants.NOTE_Z_HIT);
+                UpdateHighlights(GameConstants.NOTE_Z_HIT);
                 if (_holdBody != null)
                 {
                     float rem  = HitTimeSeconds + HoldDuration - now;
@@ -180,6 +201,15 @@ public class NoteController : MonoBehaviour
         if (z > GameConstants.NOTE_Z_DEAD) { _manager.OnNoteExpired(this); Finish(); }
     }
 
+    void UpdateHighlights(float z)
+    {
+        float x = transform.position.x;
+        if (_highlight != null)
+            _highlight.transform.position = new Vector3(x, _topHighY, z);
+        if (_frontHighlight != null)
+            _frontHighlight.transform.position = new Vector3(x, 0.06f, z + 0.14f);
+    }
+
     public void OnHit()
     {
         IsHit = true;
@@ -193,10 +223,11 @@ public class NoteController : MonoBehaviour
 
     void Finish()
     {
-        if (_holdBody)    { Destroy(_holdBody);    _holdBody    = null; }
-        if (_holdBodyMat) { Destroy(_holdBodyMat); _holdBodyMat = null; }
-        if (_slideTarget) { Destroy(_slideTarget); _slideTarget = null; }
-        if (_highlight)   { Destroy(_highlight);   _highlight   = null; }
+        if (_holdBody)       { Destroy(_holdBody);       _holdBody       = null; }
+        if (_holdBodyMat)    { Destroy(_holdBodyMat);    _holdBodyMat    = null; }
+        if (_slideTarget)    { Destroy(_slideTarget);    _slideTarget    = null; }
+        if (_highlight)      { Destroy(_highlight);      _highlight      = null; }
+        if (_frontHighlight) { Destroy(_frontHighlight); _frontHighlight = null; }
 
         if (_returnToPool != null)
         {
@@ -211,10 +242,11 @@ public class NoteController : MonoBehaviour
 
     void OnDestroy()
     {
-        if (_holdBody)    Destroy(_holdBody);
-        if (_holdBodyMat) Destroy(_holdBodyMat);
-        if (_slideTarget) Destroy(_slideTarget);
-        if (_highlight)   Destroy(_highlight);
+        if (_holdBody)       Destroy(_holdBody);
+        if (_holdBodyMat)    Destroy(_holdBodyMat);
+        if (_slideTarget)    Destroy(_slideTarget);
+        if (_highlight)      Destroy(_highlight);
+        if (_frontHighlight) Destroy(_frontHighlight);
     }
 
     float SlideEndX()
