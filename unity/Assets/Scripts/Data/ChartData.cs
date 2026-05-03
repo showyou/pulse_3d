@@ -2,14 +2,22 @@ using System;
 using System.Collections.Generic;
 
 [Serializable]
+public class SlidePoint
+{
+    public int offsetMs;  // ノートヒット時刻からの相対時間（ms）
+    public int group;     // キーグループ 0-5
+}
+
+[Serializable]
 public class ChartNote
 {
-    public int   t;              // hit time in milliseconds
-    public int[] lanes;
-    public bool  isLong;
-    public int   holdMs;
-    public int   slideEndGroup;  // -1: normal note, 0-5: slide destination group
-    public bool  isHeld;         // true: 到達時に押しっぱなしでOKの黄色ノーツ
+    public int          t;              // hit time in milliseconds
+    public int[]        lanes;
+    public bool         isLong;
+    public int          holdMs;
+    public int          slideEndGroup;  // -1: normal note, 0-5: slide destination group
+    public bool         isHeld;         // true: 到達時に押しっぱなしでOKの黄色ノーツ
+    public SlidePoint[] slidePoints;    // マルチウェイポイントスライド（2点以上で有効）
 }
 
 [Serializable]

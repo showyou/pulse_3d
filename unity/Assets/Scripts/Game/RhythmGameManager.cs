@@ -617,7 +617,7 @@ public class RhythmGameManager : MonoBehaviour
             Destroy(go.GetComponent<Collider>());
             ctrl = go.AddComponent<NoteController>();
         }
-        ctrl.Init(n.t / 1000f, n.lanes, n.isLong, n.holdMs / 1000f, this, ReturnNote, n.slideEndGroup, n.isHeld);
+        ctrl.Init(n.t / 1000f, n.lanes, n.isLong, n.holdMs / 1000f, this, ReturnNote, n.slideEndGroup, n.isHeld, n.slidePoints);
         foreach (int lane in n.lanes)
             _laneNotes[lane].Add(ctrl);
         return ctrl;

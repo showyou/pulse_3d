@@ -12,8 +12,9 @@ public class NoteController : MonoBehaviour
     public bool  IsSlide         { get; private set; }
     public int   SlideEndGroup   { get; private set; }
     public bool  IsHeld          { get; private set; }
+    public bool  IsMultiSlide    { get; private set; }  // マルチウェイポイントスライド
 
-    // ロング＋スライド = レーン移動ロングノーツ
+    // ロング＋スライドエンドグループ指定 = レーン移動ロングノーツ（旧形式）
     public bool IsSlideLong => IsLong && IsSlide;
 
     RhythmGameManager      _manager;
@@ -25,22 +26,28 @@ public class NoteController : MonoBehaviour
     GameObject _highlight;
     GameObject _frontHighlight;
     float      _topHighY;
-    float      _startX;         // 始点X（スライドロング用）
-    float      _slideLongEndX;  // 終点X（スライドロング用）
+    float      _startX;
+    float      _slideLongEndX;
 
-    static readonly Color ColorTap         = new Color(1.0f, 0.30f, 0.58f);
-    static readonly Color ColorTapHi       = new Color(1.0f, 0.70f, 0.85f);
-    static readonly Color ColorHeld        = new Color(1.0f, 0.95f, 0.2f);
-    static readonly Color ColorHeldHi      = new Color(1.0f, 1.0f,  0.65f);
-    static readonly Color ColorLong        = new Color(0.2f, 0.85f, 1.0f);
-    static readonly Color ColorLongHi      = new Color(0.6f, 0.97f, 1.0f);
-    static readonly Color ColorSlide       = new Color(1.0f, 0.55f, 0.05f);
-    static readonly Color ColorSlideHi     = new Color(1.0f, 0.80f, 0.45f);
-    static readonly Color ColorSlideLong   = new Color(0.15f, 1.0f, 0.65f);  // ティール
-    static readonly Color ColorSlideLongHi = new Color(0.55f, 1.0f, 0.82f);
-    static readonly Color ColorBody        = new Color(0.15f, 0.65f, 1.0f, 0.7f);
-    static readonly Color ColorSlideLongBody = new Color(0.1f, 0.8f, 0.5f, 0.7f);
-    static readonly Color ColorTarget      = new Color(1.0f, 0.75f, 0.2f);
+    // マルチウェイポイント用
+    float[]      _wpX;          // 各ウェイポイントのワールドX
+    float[]      _wpOffsetSec;  // 各ウェイポイントのヒット時刻からの相対時間（秒）
+    GameObject[] _slideSegObjs; // 区間ごとのボディセグメント
+    bool         _isMultiSlide;
+
+    static readonly Color ColorTap           = new Color(1.0f, 0.30f, 0.58f);
+    static readonly Color ColorTapHi         = new Color(1.0f, 0.70f, 0.85f);
+    static readonly Color ColorHeld          = new Color(1.0f, 0.95f, 0.2f);
+    static readonly Color ColorHeldHi        = new Color(1.0f, 1.0f,  0.65f);
+    static readonly Color ColorLong          = new Color(0.2f, 0.85f, 1.0f);
+    static readonly Color ColorLongHi        = new Color(0.6f, 0.97f, 1.0f);
+    static readonly Color ColorSlide         = new Color(1.0f, 0.55f, 0.05f);
+    static readonly Color ColorSlideHi       = new Color(1.0f, 0.80f, 0.45f);
+    static readonly Color ColorSlideLong     = new Color(0.15f, 1.0f, 0.65f);
+    static readonly Color ColorSlideLongHi   = new Color(0.55f, 1.0f, 0.82f);
+    static readonly Color ColorBody          = new Color(0.15f, 0.65f, 1.0f, 0.7f);
+    static readonly Color ColorSlideLongBody = new Color(0.1f,  0.8f,  0.5f, 0.7f);
+    static readonly Color ColorTarget        = new Color(1.0f, 0.75f, 0.2f);
 
     static Material _sharedTapMat;
     static Material _sharedTapHiMat;
@@ -53,17 +60,19 @@ public class NoteController : MonoBehaviour
     static Material _sharedSlideLongMat;
     static Material _sharedSlideLongHiMat;
 
-    static Material SharedMat(bool isLong, bool isSlide, bool isHeld)
+    static Material SharedMat(bool isLong, bool isSlide, bool isHeld, bool isMultiSlide)
     {
-        if (isSlide && isLong) return _sharedSlideLongMat ??= MakeMat(ColorSlideLong);
-        if (isSlide)           return _sharedSlideMat     ??= MakeMat(ColorSlide);
-        if (isLong)            return _sharedLongMat      ??= MakeMat(ColorLong);
-        if (isHeld)            return _sharedHeldMat      ??= MakeMat(ColorHeld);
-        return                        _sharedTapMat       ??= MakeMat(ColorTap);
+        if (isMultiSlide)      return _sharedSlideLongMat   ??= MakeMat(ColorSlideLong);
+        if (isSlide && isLong) return _sharedSlideLongMat   ??= MakeMat(ColorSlideLong);
+        if (isSlide)           return _sharedSlideMat       ??= MakeMat(ColorSlide);
+        if (isLong)            return _sharedLongMat        ??= MakeMat(ColorLong);
+        if (isHeld)            return _sharedHeldMat        ??= MakeMat(ColorHeld);
+        return                        _sharedTapMat         ??= MakeMat(ColorTap);
     }
 
-    static Material HiMat(bool isLong, bool isSlide, bool isHeld)
+    static Material HiMat(bool isLong, bool isSlide, bool isHeld, bool isMultiSlide)
     {
+        if (isMultiSlide)      return _sharedSlideLongHiMat ??= MakeMat(ColorSlideLongHi);
         if (isSlide && isLong) return _sharedSlideLongHiMat ??= MakeMat(ColorSlideLongHi);
         if (isSlide)           return _sharedSlideHiMat     ??= MakeMat(ColorSlideHi);
         if (isLong)            return _sharedLongHiMat      ??= MakeMat(ColorLongHi);
@@ -80,12 +89,12 @@ public class NoteController : MonoBehaviour
 
     public void Init(float hitTimeSec, int[] lanes, bool isLong, float holdSec,
                      RhythmGameManager manager, Action<NoteController> returnToPool,
-                     int slideEndGroup = -1, bool isHeld = false)
+                     int slideEndGroup = -1, bool isHeld = false,
+                     SlidePoint[] slidePoints = null)
     {
         HitTimeSeconds = hitTimeSec;
         Lanes          = lanes;
         IsLong         = isLong;
-        HoldDuration   = holdSec;
         IsHit          = false;
         IsMissed       = false;
         _holdEndTime   = 0f;
@@ -95,11 +104,20 @@ public class NoteController : MonoBehaviour
         SlideEndGroup  = slideEndGroup;
         IsHeld         = isHeld;
 
+        // マルチウェイポイント判定
+        _isMultiSlide = isLong && slidePoints != null && slidePoints.Length >= 2;
+        IsMultiSlide  = _isMultiSlide;
+
+        // holdSec: マルチスライドは最終ウェイポイントのoffsetMsを優先
+        HoldDuration = _isMultiSlide
+            ? slidePoints[slidePoints.Length - 1].offsetMs / 1000f
+            : holdSec;
+
         float x = LaneCenter(lanes);
         float w = LaneSpan(lanes) * 0.88f;
         _startX = x;
 
-        // スライドロング終点X
+        // 旧形式スライドロング終点X
         if (IsSlideLong)
         {
             int lA = GameConstants.KEY_LANES[slideEndGroup, 0];
@@ -107,12 +125,12 @@ public class NoteController : MonoBehaviour
             _slideLongEndX = (5.5f - (lA + lB) * 0.5f) * GameConstants.LANE_SPACING;
         }
 
-        float noteH = (isLong || IsSlide || isHeld) ? 0.12f : 0.22f;
+        float noteH = (isLong || IsSlide || isHeld || _isMultiSlide) ? 0.12f : 0.22f;
         transform.position   = new Vector3(x, 0.06f, GameConstants.NOTE_Z_SPAWN);
         transform.localScale = new Vector3(w, noteH, 0.25f);
-        GetComponent<Renderer>().sharedMaterial = SharedMat(isLong, IsSlide, isHeld);
+        GetComponent<Renderer>().sharedMaterial = SharedMat(isLong, IsSlide, isHeld, _isMultiSlide);
 
-        var hiMat = HiMat(isLong, IsSlide, isHeld);
+        var hiMat = HiMat(isLong, IsSlide, isHeld, _isMultiSlide);
         _topHighY = 0.06f + noteH * 0.5f;
 
         _highlight = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -125,11 +143,38 @@ public class NoteController : MonoBehaviour
         _frontHighlight.transform.localScale = new Vector3(w * 0.85f, noteH * 0.75f, 0.03f);
         _frontHighlight.GetComponent<Renderer>().sharedMaterial = hiMat;
 
-        if (isLong && holdSec > 0f)
+        if (_isMultiSlide)
+        {
+            // ウェイポイントデータ構築
+            _wpX         = new float[slidePoints.Length];
+            _wpOffsetSec = new float[slidePoints.Length];
+            for (int i = 0; i < slidePoints.Length; i++)
+            {
+                _wpX[i]         = GroupCenterX(slidePoints[i].group);
+                _wpOffsetSec[i] = slidePoints[i].offsetMs / 1000f;
+            }
+
+            // セグメントオブジェクト生成
+            float segW = GameConstants.LANE_SPACING * 1.3f;
+            _slideSegObjs = new GameObject[slidePoints.Length - 1];
+            var segMat = new Material(SafeShader());
+            HighwayBuilder.ApplyColor(segMat, ColorSlideLongBody);
+            for (int i = 0; i < _slideSegObjs.Length; i++)
+            {
+                var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                go.name = "SlideSegment";
+                Destroy(go.GetComponent<Collider>());
+                go.transform.localScale = new Vector3(segW, 0.07f, 1f);
+                go.GetComponent<Renderer>().sharedMaterial = segMat;
+                _slideSegObjs[i] = go;
+            }
+            UpdateSegmentsScrolling(GameConstants.NOTE_Z_SPAWN);
+        }
+        else if (isLong && HoldDuration > 0f)
         {
             _holdBody = GameObject.CreatePrimitive(PrimitiveType.Cube);
             Destroy(_holdBody.GetComponent<Collider>());
-            float blenZ = holdSec * GameConstants.NOTE_SPEED;
+            float blenZ = HoldDuration * GameConstants.NOTE_SPEED;
             _holdBodyMat = new Material(SafeShader());
             HighwayBuilder.ApplyColor(_holdBodyMat, IsSlideLong ? ColorSlideLongBody : ColorBody);
             _holdBody.GetComponent<Renderer>().sharedMaterial = _holdBodyMat;
@@ -143,7 +188,6 @@ public class NoteController : MonoBehaviour
             }
         }
 
-        // スライドタップのみ終点インジケータを表示（スライドロングは不要）
         if (IsSlide && !IsSlideLong)
         {
             _slideTarget = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -160,10 +204,11 @@ public class NoteController : MonoBehaviour
      ?? Shader.Find("Universal Render Pipeline/Unlit")
      ?? Shader.Find("Standard");
 
-    // スライドロングのボディ初期化（Init時のみ）
+    // ---------------------------------------------------------------
+    // スライドロング（旧形式）ボディ初期化
     void InitSlideLongBody(float headX, float headZ, float blenZ, float w)
     {
-        float dx   = _slideLongEndX - headX;
+        float dx    = _slideLongEndX - headX;
         float len3d = Mathf.Sqrt(dx * dx + blenZ * blenZ);
         _holdBody.transform.localScale = new Vector3(w * 0.65f, 0.07f, Mathf.Max(0.01f, len3d));
         _holdBody.transform.position   = new Vector3(
@@ -172,7 +217,6 @@ public class NoteController : MonoBehaviour
             new Vector3(headX - _slideLongEndX, 0f, blenZ).normalized, Vector3.up);
     }
 
-    // ボディの位置・スケール・回転を更新（毎フレーム）
     void SetBodyTransform(float headX, float headZ, float blenZ)
     {
         float bz = Mathf.Max(0.01f, blenZ);
@@ -197,6 +241,85 @@ public class NoteController : MonoBehaviour
         }
     }
 
+    // ---------------------------------------------------------------
+    // マルチウェイポイント セグメント更新
+    void UpdateSegmentsScrolling(float headZ)
+    {
+        for (int i = 0; i < _slideSegObjs.Length; i++)
+        {
+            float x0 = _wpX[i],     z0 = headZ - _wpOffsetSec[i]     * GameConstants.NOTE_SPEED;
+            float x1 = _wpX[i + 1], z1 = headZ - _wpOffsetSec[i + 1] * GameConstants.NOTE_SPEED;
+            SetSegmentCube(_slideSegObjs[i], x0, z0, x1, z1);
+        }
+    }
+
+    void UpdateSegmentsHeld(float elapsed)
+    {
+        // 現在どの区間にいるか
+        int curSeg = 0;
+        while (curSeg < _slideSegObjs.Length - 1 && elapsed >= _wpOffsetSec[curSeg + 1])
+            curSeg++;
+
+        for (int i = 0; i < _slideSegObjs.Length; i++)
+        {
+            if (i < curSeg) { _slideSegObjs[i].SetActive(false); continue; }
+            _slideSegObjs[i].SetActive(true);
+
+            float x0, z0, x1, z1;
+            if (i == curSeg)
+            {
+                x0 = ComputeHeadX(elapsed);
+                z0 = GameConstants.NOTE_Z_HIT;
+                x1 = _wpX[i + 1];
+                z1 = GameConstants.NOTE_Z_HIT - (_wpOffsetSec[i + 1] - elapsed) * GameConstants.NOTE_SPEED;
+            }
+            else
+            {
+                x0 = _wpX[i];
+                z0 = GameConstants.NOTE_Z_HIT - (_wpOffsetSec[i]     - elapsed) * GameConstants.NOTE_SPEED;
+                x1 = _wpX[i + 1];
+                z1 = GameConstants.NOTE_Z_HIT - (_wpOffsetSec[i + 1] - elapsed) * GameConstants.NOTE_SPEED;
+            }
+            SetSegmentCube(_slideSegObjs[i], x0, z0, x1, z1);
+        }
+    }
+
+    // セグメントキューブの位置・スケール・回転を設定（x0,z0=ヘッド端, x1,z1=テール端）
+    static void SetSegmentCube(GameObject go, float x0, float z0, float x1, float z1)
+    {
+        float dx = x0 - x1, dz = z0 - z1;
+        float len = Mathf.Sqrt(dx * dx + dz * dz);
+        if (len < 0.001f) { go.SetActive(false); return; }
+        go.SetActive(true);
+        go.transform.position  = new Vector3((x0 + x1) * 0.5f, 0.03f, (z0 + z1) * 0.5f);
+        go.transform.localScale = new Vector3(
+            go.transform.localScale.x, go.transform.localScale.y, len);
+        go.transform.rotation = Quaternion.LookRotation(
+            new Vector3(dx, 0f, dz).normalized, Vector3.up);
+    }
+
+    // 経過時間からヘッドのワールドX座標を補間
+    float ComputeHeadX(float elapsed)
+    {
+        for (int i = 0; i < _wpX.Length - 1; i++)
+        {
+            if (elapsed <= _wpOffsetSec[i + 1])
+            {
+                float dur = _wpOffsetSec[i + 1] - _wpOffsetSec[i];
+                float t   = dur > 0f ? Mathf.Clamp01((elapsed - _wpOffsetSec[i]) / dur) : 1f;
+                return Mathf.Lerp(_wpX[i], _wpX[i + 1], t);
+            }
+        }
+        return _wpX[_wpX.Length - 1];
+    }
+
+    static float GroupCenterX(int group)
+    {
+        float avg = (GameConstants.KEY_LANES[group, 0] + GameConstants.KEY_LANES[group, 1]) * 0.5f;
+        return (5.5f - avg) * GameConstants.LANE_SPACING;
+    }
+
+    // ---------------------------------------------------------------
     void Update()
     {
         if (IsMissed) return;
@@ -205,20 +328,30 @@ public class NoteController : MonoBehaviour
 
         if (IsHit && IsLong)
         {
-            float rem = _holdEndTime - now;
+            float rem     = _holdEndTime - now;
+            float elapsed = HoldDuration - rem;
 
-            // 始点→終点へのヘッド移動（スライドロング）
-            float headX = IsSlideLong && HoldDuration > 0f
-                ? Mathf.Lerp(_startX, _slideLongEndX, 1f - Mathf.Clamp01(rem / HoldDuration))
-                : transform.position.x;
-
-            transform.position = new Vector3(headX, 0.06f, GameConstants.NOTE_Z_HIT);
-            UpdateHighlights(GameConstants.NOTE_Z_HIT);
-
-            if (_holdBody != null)
+            float headX;
+            if (_isMultiSlide)
             {
                 if (rem <= 0f) { Finish(); return; }
-                SetBodyTransform(headX, GameConstants.NOTE_Z_HIT, rem * GameConstants.NOTE_SPEED);
+                headX = ComputeHeadX(elapsed);
+                transform.position = new Vector3(headX, 0.06f, GameConstants.NOTE_Z_HIT);
+                UpdateHighlights(GameConstants.NOTE_Z_HIT);
+                UpdateSegmentsHeld(elapsed);
+            }
+            else
+            {
+                headX = IsSlideLong && HoldDuration > 0f
+                    ? Mathf.Lerp(_startX, _slideLongEndX, Mathf.Clamp01(elapsed / HoldDuration))
+                    : transform.position.x;
+                transform.position = new Vector3(headX, 0.06f, GameConstants.NOTE_Z_HIT);
+                UpdateHighlights(GameConstants.NOTE_Z_HIT);
+                if (_holdBody != null)
+                {
+                    if (rem <= 0f) { Finish(); return; }
+                    SetBodyTransform(headX, GameConstants.NOTE_Z_HIT, rem * GameConstants.NOTE_SPEED);
+                }
             }
             return;
         }
@@ -226,11 +359,14 @@ public class NoteController : MonoBehaviour
         float z = GameConstants.NOTE_Z_HIT - (HitTimeSeconds - now) * GameConstants.NOTE_SPEED;
         transform.position = new Vector3(transform.position.x, 0.06f, z);
 
-        if (_holdBody != null)
+        if (_isMultiSlide)
+        {
+            UpdateSegmentsScrolling(z);
+        }
+        else if (_holdBody != null)
         {
             if (IsSlideLong)
             {
-                // 回転・スケールは固定、z位置のみ追従
                 float blenZ = HoldDuration * GameConstants.NOTE_SPEED;
                 _holdBody.transform.position = new Vector3(
                     (_startX + _slideLongEndX) * 0.5f, 0.03f, z - blenZ * 0.5f);
@@ -251,16 +387,28 @@ public class NoteController : MonoBehaviour
         {
             if (IsLong && HoldDuration > 0f && now < HitTimeSeconds + HoldDuration)
             {
-                float rem    = HitTimeSeconds + HoldDuration - now;
-                float blenZ  = Mathf.Max(0.01f, rem * GameConstants.NOTE_SPEED);
-                float headX  = IsSlideLong
-                    ? Mathf.Lerp(_startX, _slideLongEndX, 1f - Mathf.Clamp01(rem / HoldDuration))
-                    : transform.position.x;
+                float rem     = HitTimeSeconds + HoldDuration - now;
+                float elapsed = HoldDuration - rem;
+                float blenZ   = Mathf.Max(0.01f, rem * GameConstants.NOTE_SPEED);
 
-                transform.position = new Vector3(headX, 0.06f, GameConstants.NOTE_Z_HIT);
-                UpdateHighlights(GameConstants.NOTE_Z_HIT);
-                if (_holdBody != null)
-                    SetBodyTransform(headX, GameConstants.NOTE_Z_HIT, blenZ);
+                float headX;
+                if (_isMultiSlide)
+                {
+                    headX = ComputeHeadX(elapsed);
+                    transform.position = new Vector3(headX, 0.06f, GameConstants.NOTE_Z_HIT);
+                    UpdateHighlights(GameConstants.NOTE_Z_HIT);
+                    UpdateSegmentsHeld(elapsed);
+                }
+                else
+                {
+                    headX = IsSlideLong
+                        ? Mathf.Lerp(_startX, _slideLongEndX, Mathf.Clamp01(elapsed / HoldDuration))
+                        : transform.position.x;
+                    transform.position = new Vector3(headX, 0.06f, GameConstants.NOTE_Z_HIT);
+                    UpdateHighlights(GameConstants.NOTE_Z_HIT);
+                    if (_holdBody != null)
+                        SetBodyTransform(headX, GameConstants.NOTE_Z_HIT, blenZ);
+                }
                 return;
             }
             IsMissed = true;
@@ -299,6 +447,11 @@ public class NoteController : MonoBehaviour
         if (_slideTarget)    { Destroy(_slideTarget);    _slideTarget    = null; }
         if (_highlight)      { Destroy(_highlight);      _highlight      = null; }
         if (_frontHighlight) { Destroy(_frontHighlight); _frontHighlight = null; }
+        if (_slideSegObjs != null)
+        {
+            foreach (var go in _slideSegObjs) if (go) Destroy(go);
+            _slideSegObjs = null;
+        }
 
         if (_returnToPool != null)
         {
@@ -318,6 +471,8 @@ public class NoteController : MonoBehaviour
         if (_slideTarget)    Destroy(_slideTarget);
         if (_highlight)      Destroy(_highlight);
         if (_frontHighlight) Destroy(_frontHighlight);
+        if (_slideSegObjs != null)
+            foreach (var go in _slideSegObjs) if (go) Destroy(go);
     }
 
     float SlideEndX()
