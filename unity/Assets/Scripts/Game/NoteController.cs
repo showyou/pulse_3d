@@ -13,26 +13,34 @@ public class NoteController : MonoBehaviour
     public int   SlideEndGroup   { get; private set; }
     public bool  IsHeld          { get; private set; }
 
+    // ロング＋スライド = レーン移動ロングノーツ
+    public bool IsSlideLong => IsLong && IsSlide;
+
     RhythmGameManager      _manager;
     Action<NoteController> _returnToPool;
     GameObject _holdBody;
     Material   _holdBodyMat;
     float      _holdEndTime;
     GameObject _slideTarget;
-    GameObject _highlight;       // 上面ハイライト（全ノーツ）
-    GameObject _frontHighlight;  // 手前フェースハイライト（全ノーツ）
-    float      _topHighY;        // 上面ハイライトの Y 座標
+    GameObject _highlight;
+    GameObject _frontHighlight;
+    float      _topHighY;
+    float      _startX;         // 始点X（スライドロング用）
+    float      _slideLongEndX;  // 終点X（スライドロング用）
 
-    static readonly Color ColorTap       = new Color(1.0f, 0.30f, 0.58f);
-    static readonly Color ColorTapHi     = new Color(1.0f, 0.70f, 0.85f);
-    static readonly Color ColorHeld      = new Color(1.0f, 0.95f, 0.2f);
-    static readonly Color ColorHeldHi    = new Color(1.0f, 1.0f,  0.65f);
-    static readonly Color ColorLong      = new Color(0.2f, 0.85f, 1.0f);
-    static readonly Color ColorLongHi    = new Color(0.6f, 0.97f, 1.0f);
-    static readonly Color ColorSlide     = new Color(1.0f, 0.55f, 0.05f);
-    static readonly Color ColorSlideHi   = new Color(1.0f, 0.80f, 0.45f);
-    static readonly Color ColorBody      = new Color(0.15f, 0.65f, 1.0f, 0.7f);
-    static readonly Color ColorTarget    = new Color(1.0f, 0.75f, 0.2f);
+    static readonly Color ColorTap         = new Color(1.0f, 0.30f, 0.58f);
+    static readonly Color ColorTapHi       = new Color(1.0f, 0.70f, 0.85f);
+    static readonly Color ColorHeld        = new Color(1.0f, 0.95f, 0.2f);
+    static readonly Color ColorHeldHi      = new Color(1.0f, 1.0f,  0.65f);
+    static readonly Color ColorLong        = new Color(0.2f, 0.85f, 1.0f);
+    static readonly Color ColorLongHi      = new Color(0.6f, 0.97f, 1.0f);
+    static readonly Color ColorSlide       = new Color(1.0f, 0.55f, 0.05f);
+    static readonly Color ColorSlideHi     = new Color(1.0f, 0.80f, 0.45f);
+    static readonly Color ColorSlideLong   = new Color(0.15f, 1.0f, 0.65f);  // ティール
+    static readonly Color ColorSlideLongHi = new Color(0.55f, 1.0f, 0.82f);
+    static readonly Color ColorBody        = new Color(0.15f, 0.65f, 1.0f, 0.7f);
+    static readonly Color ColorSlideLongBody = new Color(0.1f, 0.8f, 0.5f, 0.7f);
+    static readonly Color ColorTarget      = new Color(1.0f, 0.75f, 0.2f);
 
     static Material _sharedTapMat;
     static Material _sharedTapHiMat;
@@ -42,21 +50,25 @@ public class NoteController : MonoBehaviour
     static Material _sharedLongHiMat;
     static Material _sharedSlideMat;
     static Material _sharedSlideHiMat;
+    static Material _sharedSlideLongMat;
+    static Material _sharedSlideLongHiMat;
 
     static Material SharedMat(bool isLong, bool isSlide, bool isHeld)
     {
-        if (isSlide) return _sharedSlideMat ??= MakeMat(ColorSlide);
-        if (isLong)  return _sharedLongMat  ??= MakeMat(ColorLong);
-        if (isHeld)  return _sharedHeldMat  ??= MakeMat(ColorHeld);
-        return           _sharedTapMat  ??= MakeMat(ColorTap);
+        if (isSlide && isLong) return _sharedSlideLongMat ??= MakeMat(ColorSlideLong);
+        if (isSlide)           return _sharedSlideMat     ??= MakeMat(ColorSlide);
+        if (isLong)            return _sharedLongMat      ??= MakeMat(ColorLong);
+        if (isHeld)            return _sharedHeldMat      ??= MakeMat(ColorHeld);
+        return                        _sharedTapMat       ??= MakeMat(ColorTap);
     }
 
     static Material HiMat(bool isLong, bool isSlide, bool isHeld)
     {
-        if (isSlide) return _sharedSlideHiMat ??= MakeMat(ColorSlideHi);
-        if (isLong)  return _sharedLongHiMat  ??= MakeMat(ColorLongHi);
-        if (isHeld)  return _sharedHeldHiMat  ??= MakeMat(ColorHeldHi);
-        return           _sharedTapHiMat  ??= MakeMat(ColorTapHi);
+        if (isSlide && isLong) return _sharedSlideLongHiMat ??= MakeMat(ColorSlideLongHi);
+        if (isSlide)           return _sharedSlideHiMat     ??= MakeMat(ColorSlideHi);
+        if (isLong)            return _sharedLongHiMat      ??= MakeMat(ColorLongHi);
+        if (isHeld)            return _sharedHeldHiMat      ??= MakeMat(ColorHeldHi);
+        return                        _sharedTapHiMat       ??= MakeMat(ColorTapHi);
     }
 
     static Material MakeMat(Color c)
@@ -85,6 +97,15 @@ public class NoteController : MonoBehaviour
 
         float x = LaneCenter(lanes);
         float w = LaneSpan(lanes) * 0.88f;
+        _startX = x;
+
+        // スライドロング終点X
+        if (IsSlideLong)
+        {
+            int lA = GameConstants.KEY_LANES[slideEndGroup, 0];
+            int lB = GameConstants.KEY_LANES[slideEndGroup, 1];
+            _slideLongEndX = (5.5f - (lA + lB) * 0.5f) * GameConstants.LANE_SPACING;
+        }
 
         float noteH = (isLong || IsSlide || isHeld) ? 0.12f : 0.22f;
         transform.position   = new Vector3(x, 0.06f, GameConstants.NOTE_Z_SPAWN);
@@ -94,13 +115,11 @@ public class NoteController : MonoBehaviour
         var hiMat = HiMat(isLong, IsSlide, isHeld);
         _topHighY = 0.06f + noteH * 0.5f;
 
-        // 上面ハイライト（全ノーツ）
         _highlight = GameObject.CreatePrimitive(PrimitiveType.Cube);
         Destroy(_highlight.GetComponent<Collider>());
         _highlight.transform.localScale = new Vector3(w * 0.88f, 0.02f, 0.23f);
         _highlight.GetComponent<Renderer>().sharedMaterial = hiMat;
 
-        // 手前フェースハイライト（全ノーツ）
         _frontHighlight = GameObject.CreatePrimitive(PrimitiveType.Cube);
         Destroy(_frontHighlight.GetComponent<Collider>());
         _frontHighlight.transform.localScale = new Vector3(w * 0.85f, noteH * 0.75f, 0.03f);
@@ -110,15 +129,22 @@ public class NoteController : MonoBehaviour
         {
             _holdBody = GameObject.CreatePrimitive(PrimitiveType.Cube);
             Destroy(_holdBody.GetComponent<Collider>());
-            float bodyLen = holdSec * GameConstants.NOTE_SPEED;
-            _holdBody.transform.position   = new Vector3(x, 0.03f, GameConstants.NOTE_Z_SPAWN - bodyLen * 0.5f);
-            _holdBody.transform.localScale = new Vector3(w * 0.65f, 0.07f, bodyLen);
+            float blenZ = holdSec * GameConstants.NOTE_SPEED;
             _holdBodyMat = new Material(SafeShader());
-            HighwayBuilder.ApplyColor(_holdBodyMat, ColorBody);
+            HighwayBuilder.ApplyColor(_holdBodyMat, IsSlideLong ? ColorSlideLongBody : ColorBody);
             _holdBody.GetComponent<Renderer>().sharedMaterial = _holdBodyMat;
+
+            if (IsSlideLong)
+                InitSlideLongBody(x, GameConstants.NOTE_Z_SPAWN, blenZ, w);
+            else
+            {
+                _holdBody.transform.position   = new Vector3(x, 0.03f, GameConstants.NOTE_Z_SPAWN - blenZ * 0.5f);
+                _holdBody.transform.localScale = new Vector3(w * 0.65f, 0.07f, blenZ);
+            }
         }
 
-        if (IsSlide)
+        // スライドタップのみ終点インジケータを表示（スライドロングは不要）
+        if (IsSlide && !IsSlideLong)
         {
             _slideTarget = GameObject.CreatePrimitive(PrimitiveType.Cube);
             Destroy(_slideTarget.GetComponent<Collider>());
@@ -134,6 +160,43 @@ public class NoteController : MonoBehaviour
      ?? Shader.Find("Universal Render Pipeline/Unlit")
      ?? Shader.Find("Standard");
 
+    // スライドロングのボディ初期化（Init時のみ）
+    void InitSlideLongBody(float headX, float headZ, float blenZ, float w)
+    {
+        float dx   = _slideLongEndX - headX;
+        float len3d = Mathf.Sqrt(dx * dx + blenZ * blenZ);
+        _holdBody.transform.localScale = new Vector3(w * 0.65f, 0.07f, Mathf.Max(0.01f, len3d));
+        _holdBody.transform.position   = new Vector3(
+            (headX + _slideLongEndX) * 0.5f, 0.03f, headZ - blenZ * 0.5f);
+        _holdBody.transform.rotation   = Quaternion.LookRotation(
+            new Vector3(headX - _slideLongEndX, 0f, blenZ).normalized, Vector3.up);
+    }
+
+    // ボディの位置・スケール・回転を更新（毎フレーム）
+    void SetBodyTransform(float headX, float headZ, float blenZ)
+    {
+        float bz = Mathf.Max(0.01f, blenZ);
+        if (IsSlideLong)
+        {
+            float dx    = _slideLongEndX - headX;
+            float len3d = Mathf.Max(0.01f, Mathf.Sqrt(dx * dx + bz * bz));
+            _holdBody.transform.localScale = new Vector3(
+                _holdBody.transform.localScale.x,
+                _holdBody.transform.localScale.y, len3d);
+            _holdBody.transform.position = new Vector3(
+                (headX + _slideLongEndX) * 0.5f, 0.03f, headZ - bz * 0.5f);
+            _holdBody.transform.rotation = Quaternion.LookRotation(
+                new Vector3(headX - _slideLongEndX, 0f, bz).normalized, Vector3.up);
+        }
+        else
+        {
+            _holdBody.transform.localScale = new Vector3(
+                _holdBody.transform.localScale.x,
+                _holdBody.transform.localScale.y, bz);
+            _holdBody.transform.position = new Vector3(headX, 0.03f, headZ - bz * 0.5f);
+        }
+    }
+
     void Update()
     {
         if (IsMissed) return;
@@ -142,20 +205,20 @@ public class NoteController : MonoBehaviour
 
         if (IsHit && IsLong)
         {
-            transform.position = new Vector3(transform.position.x, 0.06f, GameConstants.NOTE_Z_HIT);
+            float rem = _holdEndTime - now;
+
+            // 始点→終点へのヘッド移動（スライドロング）
+            float headX = IsSlideLong && HoldDuration > 0f
+                ? Mathf.Lerp(_startX, _slideLongEndX, 1f - Mathf.Clamp01(rem / HoldDuration))
+                : transform.position.x;
+
+            transform.position = new Vector3(headX, 0.06f, GameConstants.NOTE_Z_HIT);
             UpdateHighlights(GameConstants.NOTE_Z_HIT);
+
             if (_holdBody != null)
             {
-                float rem = _holdEndTime - now;
                 if (rem <= 0f) { Finish(); return; }
-                float blen = rem * GameConstants.NOTE_SPEED;
-                _holdBody.transform.localScale = new Vector3(
-                    _holdBody.transform.localScale.x,
-                    _holdBody.transform.localScale.y,
-                    Mathf.Max(0.01f, blen));
-                _holdBody.transform.position = new Vector3(
-                    transform.position.x, 0.03f,
-                    GameConstants.NOTE_Z_HIT - blen * 0.5f);
+                SetBodyTransform(headX, GameConstants.NOTE_Z_HIT, rem * GameConstants.NOTE_SPEED);
             }
             return;
         }
@@ -165,8 +228,18 @@ public class NoteController : MonoBehaviour
 
         if (_holdBody != null)
         {
-            float blen = _holdBody.transform.localScale.z;
-            _holdBody.transform.position = new Vector3(transform.position.x, 0.03f, z - blen * 0.5f);
+            if (IsSlideLong)
+            {
+                // 回転・スケールは固定、z位置のみ追従
+                float blenZ = HoldDuration * GameConstants.NOTE_SPEED;
+                _holdBody.transform.position = new Vector3(
+                    (_startX + _slideLongEndX) * 0.5f, 0.03f, z - blenZ * 0.5f);
+            }
+            else
+            {
+                float blen = _holdBody.transform.localScale.z;
+                _holdBody.transform.position = new Vector3(transform.position.x, 0.03f, z - blen * 0.5f);
+            }
         }
 
         if (_slideTarget != null)
@@ -178,18 +251,16 @@ public class NoteController : MonoBehaviour
         {
             if (IsLong && HoldDuration > 0f && now < HitTimeSeconds + HoldDuration)
             {
-                transform.position = new Vector3(transform.position.x, 0.06f, GameConstants.NOTE_Z_HIT);
+                float rem    = HitTimeSeconds + HoldDuration - now;
+                float blenZ  = Mathf.Max(0.01f, rem * GameConstants.NOTE_SPEED);
+                float headX  = IsSlideLong
+                    ? Mathf.Lerp(_startX, _slideLongEndX, 1f - Mathf.Clamp01(rem / HoldDuration))
+                    : transform.position.x;
+
+                transform.position = new Vector3(headX, 0.06f, GameConstants.NOTE_Z_HIT);
                 UpdateHighlights(GameConstants.NOTE_Z_HIT);
                 if (_holdBody != null)
-                {
-                    float rem  = HitTimeSeconds + HoldDuration - now;
-                    float blen = Mathf.Max(0.01f, rem * GameConstants.NOTE_SPEED);
-                    _holdBody.transform.localScale = new Vector3(
-                        _holdBody.transform.localScale.x,
-                        _holdBody.transform.localScale.y, blen);
-                    _holdBody.transform.position = new Vector3(
-                        transform.position.x, 0.03f, GameConstants.NOTE_Z_HIT - blen * 0.5f);
-                }
+                    SetBodyTransform(headX, GameConstants.NOTE_Z_HIT, blenZ);
                 return;
             }
             IsMissed = true;

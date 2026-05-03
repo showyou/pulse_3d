@@ -106,13 +106,23 @@ StreamingAssets/
 - 叩いてから `holdMs` ミリ秒間押し続ける
 - ヒット窓を逃してもボディが残っている間は途中から押してもOK（Good判定）
 
-### スライドノーツ
+### スライドノーツ（タップ）
 ```json
 { "t": 3000, "lanes": [0, 1], "isLong": false, "holdMs": 0, "slideEndGroup": 3, "isHeld": false }
 ```
 - 色: オレンジ
 - `slideEndGroup` で指定したグループを500ms以内に押すことで成立
 - 始点と終点を異なるキーグループで配置する
+
+### スライドロングノーツ
+```json
+{ "t": 3000, "lanes": [0, 1], "isLong": true, "holdMs": 1200, "slideEndGroup": 3, "isHeld": false }
+```
+- 色: ティール（緑寄りの水色）
+- `isLong: true` かつ `slideEndGroup >= 0` の組み合わせ
+- 始点グループを押してホールドしながら、終点グループへレーンが移動するロングノーツ
+- ボディが斜めに描画され、ヘッドが `holdMs` をかけて終点X座標に移動する
+- 判定は始点グループでのホールド継続（終点グループの押下は不要）
 
 ### 押しっぱなしノーツ（isHeld）
 ```json

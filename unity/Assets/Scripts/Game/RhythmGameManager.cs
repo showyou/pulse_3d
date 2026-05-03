@@ -827,9 +827,9 @@ public class RhythmGameManager : MonoBehaviour
         float err = Mathf.Abs(MusicTime - best.HitTimeSeconds);
         var j = err <= GameConstants.HIT_WINDOW_PERFECT ? Judgment.Perfect : Judgment.Good;
 
-        if (best.IsSlide)
+        if (best.IsSlide && !best.IsLong)
         {
-            // スライド始点: 判定を保留し終点グループの入力を待つ
+            // スライドタップ始点: 判定を保留し終点グループの入力を待つ
             RegisterJudgment(j);
             SpawnHitEffect(best, j);
             _hitSeSource.PlayOneShot(_hitClip, 0.7f);
