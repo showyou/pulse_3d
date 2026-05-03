@@ -42,6 +42,9 @@ public class RhythmGameManager : MonoBehaviour
     int   _score, _combo, _maxCombo;
     int   _perfect, _good, _miss;
     bool  _isPlaying;
+    bool  _fadingOut;
+    float _fadeTimer;
+    const float FADE_DURATION = 2f;
     double _startDspTime;
     bool  _videoHasAudio;
     float _musicTimeOffset;
@@ -304,7 +307,10 @@ public class RhythmGameManager : MonoBehaviour
         for (int g = 0; g < 6; g++) { _holdNote[g] = null; _keyHeld[g] = false; _holdTick[g] = 0f; _slideNote[g] = null; _slideSince[g] = 0f; }
 
         _score = _combo = _maxCombo = _perfect = _good = _miss = 0;
-        _spawnIndex       = 0;
+        _spawnIndex        = 0;
+        _fadingOut         = false;
+        _fadeTimer         = 0f;
+        audioSource.volume = 1f;
         _judgmentText     = "";
         _judgmentTimer    = 0f;
         _musicTimeOffset  = Mathf.Max(0f, debugStartTime);
@@ -396,9 +402,15 @@ public class RhythmGameManager : MonoBehaviour
 
     void EndGame()
     {
-        _isPlaying = false;
-        _state     = GameState.Result;
-        if (_videoPlayer != null) _videoPlayer.Stop();
+        _isPlaying         = false;
+        _fadingOut         = false;
+        audioSource.volume = 1f;
+        if (_videoPlayer != null)
+        {
+            if (_videoHasAudio) _videoPlayer.SetDirectAudioVolume(0, 1f);
+            _videoPlayer.Stop();
+        }
+        _state = GameState.Result;
     }
 
     void RetrySong()
@@ -557,10 +569,22 @@ public class RhythmGameManager : MonoBehaviour
 
         // Song end detection (#8)
         float endTime = _chart.meta.duration > 0
-            ? _chart.meta.duration / 1000f + 1.5f
-            : (_chart.notes.Count > 0 ? _chart.notes[_chart.notes.Count - 1].t / 1000f + 3f : 10f);
-        if (MusicTime >= endTime && _spawnIndex >= _chart.notes.Count)
-            EndGame();
+            ? _chart.meta.duration / 1000f
+            : (_chart.notes.Count > 0 ? _chart.notes[_chart.notes.Count - 1].t / 1000f + 1f : 10f);
+        if (!_fadingOut && MusicTime >= endTime && _spawnIndex >= _chart.notes.Count)
+        {
+            _fadingOut = true;
+            _fadeTimer = 0f;
+        }
+        if (_fadingOut)
+        {
+            _fadeTimer += Time.deltaTime;
+            float vol = Mathf.Clamp01(1f - _fadeTimer / FADE_DURATION);
+            audioSource.volume = vol;
+            if (_videoHasAudio && _videoPlayer != null)
+                _videoPlayer.SetDirectAudioVolume(0, vol);
+            if (_fadeTimer >= FADE_DURATION) EndGame();
+        }
     }
 
     void HandleSelectInput()
@@ -578,7 +602,7 @@ public class RhythmGameManager : MonoBehaviour
 
     // ---------------------------------------------------------------
     // Note pool (#4)
-    void SpawnNote(ChartNote n)
+    NoteController SpawnNote(ChartNote n)
     {
         NoteController ctrl;
         if (_notePool.Count > 0)
@@ -596,6 +620,22 @@ public class RhythmGameManager : MonoBehaviour
         ctrl.Init(n.t / 1000f, n.lanes, n.isLong, n.holdMs / 1000f, this, ReturnNote, n.slideEndGroup, n.isHeld);
         foreach (int lane in n.lanes)
             _laneNotes[lane].Add(ctrl);
+        return ctrl;
+    }
+
+    void SpawnChordConnector(System.Collections.Generic.List<NoteController> notes)
+    {
+        float xMin = float.MaxValue, xMax = float.MinValue;
+        foreach (var n in notes)
+        {
+            float half = n.transform.localScale.x * 0.5f;
+            xMin = Mathf.Min(xMin, n.transform.position.x - half);
+            xMax = Mathf.Max(xMax, n.transform.position.x + half);
+        }
+        var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        go.name = "ChordConnector";
+        Destroy(go.GetComponent<Collider>());
+        go.AddComponent<ChordConnector>().Init(notes[0], xMin, xMax);
     }
 
     void ReturnNote(NoteController n) => _notePool.Enqueue(n);
@@ -692,10 +732,20 @@ public class RhythmGameManager : MonoBehaviour
     {
         while (_spawnIndex < _chart.notes.Count)
         {
-            var n = _chart.notes[_spawnIndex];
-            if (MusicTime < n.t / 1000f - GameConstants.TRAVEL_TIME) break;
-            SpawnNote(n);
-            _spawnIndex++;
+            var first = _chart.notes[_spawnIndex];
+            if (MusicTime < first.t / 1000f - GameConstants.TRAVEL_TIME) break;
+
+            // 同じ t を持つノーツをまとめてスポーン
+            int sameT = first.t;
+            var batch = new System.Collections.Generic.List<NoteController>();
+            while (_spawnIndex < _chart.notes.Count && _chart.notes[_spawnIndex].t == sameT)
+            {
+                batch.Add(SpawnNote(_chart.notes[_spawnIndex]));
+                _spawnIndex++;
+            }
+
+            if (batch.Count > 1)
+                SpawnChordConnector(batch);
         }
     }
 
